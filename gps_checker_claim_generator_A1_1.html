@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS Checker & Claim Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d1d5db;
+      --header: #1f4e79;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+      --warn: #b45309;
+      --soft: #eef6ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
+    .container { max-width: 1500px; margin: 0 auto; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); margin-bottom: 18px; }
+    h1 { margin: 0; font-size: 24px; color: var(--header); }
+    .title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap; width: 100%; }
+    .version-label { color: var(--muted); font-weight: 700; white-space: nowrap; padding-top: 0; }
+    .version-link { width: auto; min-width: max-content; margin-left: auto; border: none; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; color: var(--muted); padding: 0; box-shadow: none; }
+    .version-link:hover { color: var(--header); background: transparent; opacity: 1; }
+    h2 { margin: 0 0 8px; font-size: 18px; color: var(--header); }
+    h3 { margin: 0 0 10px; font-size: 16px; color: var(--header); }
+    p { margin: 6px 0; color: var(--muted); line-height: 1.45; }
+    .controls { display: grid; grid-template-columns: minmax(260px, 1fr) 160px; gap: 12px; align-items: end; margin-top: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    label { display: block; font-weight: 700; margin-bottom: 6px; font-size: 13px; }
+    input, select, button, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: white; }
+    input[type="checkbox"] { width: auto; transform: scale(1.1); }
+    button { cursor: pointer; border: none; background: var(--header); color: white; font-weight: 700; }
+    button:hover { opacity: 0.92; }
+    button.secondary { background: #4b5563; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    .table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: white; }
+    table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; font-size: 14px; vertical-align: middle; white-space: normal; word-break: break-word; }
+    th { background: var(--header); color: white; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .cell-select, .cell-input { width: 100%; min-width: 0; max-width: 100%; padding: 7px 8px; font-size: 13px; }
+    #resultTable th:nth-child(1), #resultTable td:nth-child(1) { width: 70px; }
+    #resultTable th:nth-child(2), #resultTable td:nth-child(2) { width: 14%; }
+    #resultTable th:nth-child(3), #resultTable td:nth-child(3),
+    #resultTable th:nth-child(4), #resultTable td:nth-child(4) { width: 13%; text-align: right; }
+    #resultTable th:nth-child(5), #resultTable td:nth-child(5) { width: 22%; }
+    #resultTable th:nth-child(6), #resultTable td:nth-child(6) { width: 18%; }
+    #resultTable th:nth-child(7), #resultTable td:nth-child(7) { width: 100px; text-align: right; }
+    .hidden { display: none; }
+    .error { color: var(--bad); font-weight: 700; margin-top: 12px; white-space: pre-line; }
+    .success { color: var(--ok); font-weight: 700; margin-top: 12px; }
+    .error-space { border: 1px solid var(--border); border-radius: 10px; background: #ffffff; padding: 14px; min-height: 90px; margin-top: 12px; }
+    .error-space-title { font-weight: 700; color: var(--header); margin-bottom: 8px; }
+    .error-list { margin: 0; padding-left: 20px; line-height: 1.55; }
+    .error-list li { margin-bottom: 6px; white-space: normal; }
+    .no-error { color: var(--ok); font-weight: 700; }
+    .muted { color: var(--muted); }
+    .subpanel { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 14px; background: #fbfdff; }
+    .claim-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .claim-item { display: grid; grid-template-columns: 1fr 140px; gap: 10px; align-items: center; border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: white; }
+    .claim-item.checkbox-only { grid-template-columns: 1fr; }
+    .inline-check { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 0; }
+    .status { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .ok { background: #ccfbf1; color: var(--ok); }
+    .bad { background: #fee2e2; color: var(--bad); }
+    .warn { background: #fef3c7; color: var(--warn); }
+    .qty { font-weight: 800; color: #065f46; }
+    .empty-state { color: var(--muted); text-align: center; padding: 18px; }
+    .action-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+    .action-row button { max-width: 260px; }
+    .builder-table input, .builder-table select { padding: 7px 8px; font-size: 13px; }
+    .builder-table th { text-align: center; }
+    .builder-table .remove-row { background: #b91c1c; padding: 7px 10px; }
+    .builder-table .checkbox-cell { text-align: center; vertical-align: middle; }
+    .builder-table .checkbox-cell { text-align: center !important; vertical-align: middle !important; }
+    .builder-table .checkbox-cell input[type="checkbox"] { display: inline-block; margin: 0 auto; vertical-align: middle; }
+    .report-preview { display:none; margin-top: 16px; padding: 18px; background: #fff; color: #111827; border: 1px solid #111; border-radius: 10px; }
+    .report-preview.is-visible { display:block; }
+    .print-title { text-align:center; font-size: 20px; font-weight: 900; text-transform: uppercase; margin-bottom: 12px; }
+    .print-box { border: 2px solid #111; margin-bottom: 14px; }
+    .print-box-header { padding: 8px 10px; border-bottom: 1px solid #111; font-weight: 800; }
+    .print-body { padding: 12px; }
+    .report-meta { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 12px 20px; }
+    .report-meta div { display: grid; grid-template-columns: 150px 1fr; gap: 8px; align-items: end; }
+    .report-line { min-height: 22px; border-bottom: 2px solid #111; font-weight: 700; }
+    .report-table { table-layout: auto; }
+    .report-table th, .report-table td { border: 1px solid #111; color: #111827; background: white; }
+    .report-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .report-list li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; line-height: 1.45; }
+    .report-mark { display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 22px; border: 1.5px solid #111; border-radius: 50%; font-weight: 900; }
+    .photo-report-row { display: grid; grid-template-columns: 34px 1fr 60px; gap: 10px; align-items: center; margin-bottom: 8px; }
+    .photo-status { border: 1.5px solid #111; min-height: 24px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+
+    .intro-text { margin: 6px 0 20px; color: var(--muted); line-height: 1.5; }
+    .section-help { margin: 0 0 14px; color: var(--muted); line-height: 1.45; }
+
+    .mandatory-error {
+      border-color: #dc2626 !important;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14) !important;
+      background: #fff7f7 !important;
+    }
+    tr.has-mandatory-error td {
+      background: #fff1f2 !important;
+    }
+
+    .acceptance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .acceptance-column { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: #fbfdff; }
+    .acceptance-group-title { margin: 12px 0 8px; color: var(--header); font-weight: 800; font-size: 14px; }
+    .check-row { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .check-row:last-child { border-bottom: none; }
+    .check-row label { margin: 0; font-weight: 600; line-height: 1.35; }
+    .reason-input { grid-column: 2; margin-top: 6px; }
+    .photo-status-row { display: grid; grid-template-columns: 1fr 110px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .photo-status-row:last-child { border-bottom: none; }
+    .photo-status-row span { line-height: 1.35; }
+
+    @media (max-width: 900px) {
+      body { padding: 12px; }
+      .title-row { align-items: flex-start; }
+      h1 { font-size: 20px; }
+      .version-link { font-size: 13px; }
+      .controls, .grid-2, .grid-3, .grid-4, .claim-grid, .report-meta, .acceptance-grid { grid-template-columns: 1fr; }
+      .claim-item { grid-template-columns: 1fr; }
+      .action-row button { max-width: none; }
+      th, td { padding: 8px 6px; font-size: 12px; }
+      #resultTable th:nth-child(1), #resultTable td:nth-child(1) { width: 54px; }
+      #resultTable th:nth-child(7), #resultTable td:nth-child(7) { width: 82px; }
+    }
+    @media print {
+      body * { visibility: hidden; }
+      #pipeReportPreview, #pipeReportPreview * { visibility: visible; }
+      #pipeReportPreview { display: block !important; position: absolute; inset: 0 auto auto 0; width: 100%; border: none; border-radius: 0; }
+    }
+
+  .change-log-toggle {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 9999;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #ffffff;
+    background: #1f4e79;
+    border: 1px solid rgba(255,255,255,0.35);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+  }
+    position: fixed;
+    left: 16px;
+    bottom: 62px;
+    z-index: 9999;
+    width: min(520px, calc(100vw - 32px));
+    max-height: 320px;
+    overflow: auto;
+    display: none;
+    background: #ffffff;
+    color: #111827;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    box-shadow: 0 16px 36px rgba(0,0,0,0.24);
+    padding: 14px;
+  }
+  .change-log-panel th, .change-log-panel td { border: 1px solid #d1d5db; padding: 8px; text-align: left; color: #111827; }
+
+  .project-checkbox-field {
+    display: flex;
+    align-items: center;
+    min-height: 58px;
+  }
+  .inline-checkbox-label {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+  .inline-checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="title-row">
+        <h1>GPS Checker &amp; Claim Generator</h1>
+        <span class="version-label">Version: A1.1</span>
+      </div>
+      <div class="intro-text">
+        <p>The tool is arranged into 5 sections: <strong>Section 1</strong> records manhole entry, <strong>Section 2</strong> checks pipe length from GPS coordinates, <strong>Section 3</strong> captures the pipe acceptance report checklist, <strong>Section 4</strong> captures additional claims, and <strong>Section 5</strong> generates the surface summary and SWP priced items.</p>
+      </div>
+
+      <div class="subpanel">
+        <p class="section-help">Input all fields in the <strong>Project Information</strong> section, upload the <strong>GPS Coordinate File</strong>, then click <strong>Generate Table</strong>.</p>
+        <h2>Project Information</h2>
+        <div class="grid-2">
+          <div>
+            <label for="contractor">Contractor (Populated from Excel File):</label>
+            <input type="text" id="contractor" placeholder="Input contractor name">
+          </div>
+          <div>
+            <label for="reportProjectNo">Project No. (Populated from Excel File):</label>
+            <input type="text" id="reportProjectNo" placeholder="Input project no.">
+          </div>
+          <div>
+            <label for="serviceOrderNo">Service Order No.</label>
+            <input type="text" id="serviceOrderNo" placeholder="Input service order no.">
+          </div>
+          <div>
+            <label for="reportLocation">Location (Populated from Excel File):</label>
+            <input type="text" id="reportLocation" placeholder="Input location">
+          </div>
+          <div>
+            <label for="ltaApplicationNo">LTA Application No.</label>
+            <input type="text" id="ltaApplicationNo" placeholder="Input LTA application no.">
+          </div>
+          <div>
+            <label for="pipelineSupervisor">Pipeline Supervisor:</label>
+            <input type="text" id="pipelineSupervisor" placeholder="Input pipeline supervisor">
+          </div>
+          <div>
+            <label for="workCompletedOn">Work Completed On:</label>
+            <input type="date" id="workCompletedOn" max="">
+          </div>
+          <div class="checkbox-field project-checkbox-field">
+            <label for="haunchingNotDone" class="inline-checkbox-label">
+              <input type="checkbox" id="haunchingNotDone">
+              <span>Haunching not done</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div>
+          <label for="fileInput">Excel File</label>
+          <input type="file" id="fileInput" accept=".xlsx,.xls" />
+        </div>
+        <div>
+          <button type="button" id="generateBtn">Generate Table</button>
+        </div>
+      </div>
+      <div id="messageBox" class="hidden"></div>
+    </div>
+
+
+    <div id="manholeCard" class="card hidden">
+      <h1>Section 1: Dynamic Manhole Entry</h1>
+      <p class="section-help">Input the manhole connection details and select the related IPID No. for each entry.</p>
+      <p class="section-help">Tick <strong>Boring Same Wall</strong> only for subsequent boring on the same wall face, not the first manhole. If a manhole number is marked as <strong>New MH</strong>, the same manhole number will be treated as New MH in later rows.</p>
+      <div class="table-wrap">
+        <table class="builder-table">
+          <thead><tr><th>Pipe Size</th><th>Manhole A</th><th>New MH</th><th>Boring Same Wall</th><th>IPID No.</th><th>Manhole B</th><th>New MH</th><th>Boring Same Wall</th><th>Pipe Test Date</th><th>Action</th></tr></thead>
+          <tbody id="manholeRows"></tbody>
+        </table>
+      </div>
+      <div class="action-row"><button type="button" class="secondary" id="addManholeRowBtn">+ Add Row</button></div>
+    </div>
+
+    <div id="resultCard" class="card hidden">
+      <h1>Section 2: Pipe Length</h1>
+      <p class="section-help">Review the calculated pipe length, then select the surface type and enter the common trench reference where applicable.</p>
+      <div class="table-wrap">
+        <table id="resultTable"></table>
+      </div>
+
+    </div>
+
+    <div id="pipeAcceptanceCard" class="card hidden">
+      <h1>Section 3: Pipe Acceptance Report</h1>
+      <p class="section-help">Complete the pipe acceptance checklist and photo status information for the pipe testing record.</p>
+      <div class="acceptance-grid">
+        <div class="acceptance-column">
+          <h2>Pipe Acceptance Checklist</h2>
+          <div class="acceptance-group-title">For all pipe sizes</div>
+          <div class="check-row"><input type="checkbox" id="checkDrawRope"><label for="checkDrawRope">Size of draw rope provided (6mm)</label></div>
+          <div class="check-row"><input type="checkbox" id="checkAbandonedMarked"><label for="checkAbandonedMarked">Abandoned pipe(s) has/have been marked in red on MH wall</label></div>
+
+          <div class="acceptance-group-title" id="p50ChecklistTitle">For P50</div>
+          <div id="p50ChecklistGroup">
+            <div class="check-row"><input type="checkbox" id="checkP50Through"><label for="checkP50Through">Spiral Mandrel for P50 pipe (size 44mm) through</label></div>
+            <div class="check-row"><input type="checkbox" id="checkSubDuct"><label for="checkSubDuct">Spiral Mandrel not through, use 1 inch sub duct (25mm)</label></div>
+          </div>
+
+          <div class="acceptance-group-title" id="p110ChecklistTitle">For P110</div>
+          <div id="p110ChecklistGroup">
+            <div class="check-row"><input type="checkbox" id="checkP110Through"><label for="checkP110Through">Mandrel through for P110 pipe (dia. 83mm)</label></div>
+            <div class="check-row">
+              <input type="checkbox" id="checkSpiralThrough">
+              <label for="checkSpiralThrough">Mandrel not through for P110 pipe, Spiral Mandrel (size 95mm) through</label>
+              <input type="text" class="reason-input" id="reasonSpiralThrough" placeholder="Optional reason">
+            </div>
+            <div class="check-row">
+              <input type="checkbox" id="checkMandrelNotThrough">
+              <label for="checkMandrelNotThrough">Mandrel and Spiral Mandrel not through</label>
+              <input type="text" class="reason-input" id="reasonMandrelNotThrough" placeholder="Optional reason">
+            </div>
+          </div>
+        </div>
+
+        <div class="acceptance-column">
+          <h2>Photo List Checklist</h2>
+          <div class="photo-status-row"><span>a) Pipe length for each type of trench surface, trench width, trench depth</span><select id="photoA"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+          <div class="photo-status-row"><span>b) Pipe encasement sand, quarry dust or concrete</span><select id="photoB"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+          <div class="photo-status-row"><span>c) Pipe spacers between installed pipes</span><select id="photoC"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+          <div class="photo-status-row"><span>d) Fabric wire reinforcement for pipeline 16W &amp; above</span><select id="photoD"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+          <div class="photo-status-row"><span>e) Strutting &amp; shoring for trench depth &gt; 1.5m</span><select id="photoE"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+          <div class="photo-status-row"><span>f) Reinstatement length, width for each type of trench surface</span><select id="photoF"><option value="Yes">Yes</option><option value="No" selected>No</option><option value="NA">NA</option></select></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="claimsCard" class="card hidden">
+      <h1>Section 4: Additional Claims</h1>
+      <p class="section-help">Tick any applicable claim and enter the quantity where required; blank or invalid quantities will default to 1 when selected.</p>
+        <div class="claim-grid">
+          <!-- Asphalt claim inputs are intentionally hidden from the UI, but retained in the code so the existing asphalt logic remains available. -->
+          <div style="display:none;"><input type="checkbox" id="claimAsphalt50"><input type="checkbox" id="claimAsphalt75"></div>
+          <div class="claim-item"><label class="inline-check"><input type="checkbox" id="claimTma"> TMA</label><input id="claimTmaQty" placeholder="QTY" inputmode="numeric"></div>
+          <div class="claim-item"><label class="inline-check"><input type="checkbox" id="claimWaterTank"> Water Tank</label><input id="claimWaterTankQty" placeholder="QTY" inputmode="numeric"></div>
+          <div class="claim-item"><label class="inline-check"><input type="checkbox" id="claimMillingPatching"> Milling & Patching</label><input id="claimMillingPatchingQty" placeholder="QTY" inputmode="numeric"></div>
+          <div class="claim-item"><label class="inline-check"><input type="checkbox" id="claimWayleave"> Wayleave Application (13.2)</label><input id="claimWayleaveQty" placeholder="QTY" inputmode="numeric"></div>
+          <div class="claim-item"><label class="inline-check"><input type="checkbox" id="claimAso"> Auxiliary Security Officer (ASO)</label><input id="claimAsoQty" placeholder="QTY" inputmode="numeric"></div>
+        </div>
+
+      <div class="action-row">
+        <button type="button" id="generateSwpBtn" disabled>Generate Summary and Quantities</button>
+        <span class="muted">Select Surface/Common Trench, complete Section 1, Section 3 and Section 4, then generate the summary and SWP priced items.</span>
+      </div>
+    </div>
+
+    <div id="swpOutputCard" class="card hidden">
+      <h1>Section 5: Summary</h1>
+      <p class="section-help">Click Generate Summary and Quantities to produce the surface and laying summary together with the SWP priced items.</p>
+      <div id="swpOutput"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const TABLE_HEADERS = ['Point', 'IPID', 'XCoordinate', 'YCoordinate', 'Surface', 'Common Trench', 'Length'];
+    let currentRows = [];
+    let manholeRowSequence = 0;
+
+    document.getElementById('generateBtn').addEventListener('click', processFile);
+    document.getElementById('generateSwpBtn').addEventListener('click', generateSwpQuantities);
+    document.getElementById('addManholeRowBtn').addEventListener('click', () => addManholeRow());
+    applyPastDateMax(document.getElementById('workCompletedOn'));
+    document.getElementById('workCompletedOn').addEventListener('change', event => { applyPastDateMax(event.target); clearMandatoryHighlightForField(event.target); });
+
+    function showMessage(message, type) {
+      const box = document.getElementById('messageBox');
+      box.textContent = message;
+      box.className = type === 'error' ? 'error' : 'success';
+      box.classList.remove('hidden');
+    }
+    function clearMessage() { const box = document.getElementById('messageBox'); box.textContent = ''; box.className = 'hidden'; }
+    function normalizeHeader(value) { return String(value ?? '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, ''); }
+    function normalize(value) { return String(value ?? '').toLowerCase().trim(); }
+    function toNumber(value) { if (value === null || value === undefined || String(value).trim() === '') return NaN; return Number(String(value).replace(/,/g, '').trim()); }
+    function num(value) { const n = toNumber(value); return Number.isNaN(n) ? 0 : n; }
+    function isSameNumber(a, b, tolerance = 0.001) { if (Number.isNaN(a) || Number.isNaN(b)) return false; return Math.abs(a - b) <= tolerance; }
+    function escapeHtml(value) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
+    function uniqueValues(values) { return [...new Set(values.filter(v => String(v ?? '').trim() !== ''))]; }
+    function numberToLetters(number) { let n = number; let label = ''; while (n > 0) { n--; label = String.fromCharCode(65 + (n % 26)) + label; n = Math.floor(n / 26); } return label || 'A'; }
+    function findHeaderRow(rows) { for (let r = 0; r < rows.length; r++) { const normalized = rows[r].map(normalizeHeader); if (normalized.includes('xcoordinate') && normalized.includes('ycoordinate')) return r; } return -1; }
+    function findColumnIndex(headers, possibleNames) { const normalizedHeaders = headers.map(normalizeHeader); const normalizedNames = possibleNames.map(normalizeHeader); return normalizedHeaders.findIndex(h => normalizedNames.includes(h)); }
+    function findNearbyProjectValue(rows, rowIndex, colIndex) {
+      const candidates = [];
+      const row = rows[rowIndex] || [];
+      for (let c = colIndex + 1; c < Math.min(row.length, colIndex + 6); c++) candidates.push(row[c]);
+      for (let r = rowIndex + 1; r < Math.min(rows.length, rowIndex + 6); r++) candidates.push((rows[r] || [])[colIndex]);
+      for (const value of candidates) {
+        const text = String(value ?? '').trim();
+        if (text && !/^[:\-]+$/.test(text)) return text;
+      }
+      return '';
+    }
+    function findProjectInfoValue(rows, aliases) {
+      const aliasSet = new Set(aliases.map(normalizeHeader));
+
+      // Format A: label in one cell, value in the next few cells / nearby rows.
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r] || [];
+        for (let c = 0; c < row.length; c++) {
+          const cell = normalizeHeader(row[c]);
+          if (!cell) continue;
+          if (aliasSet.has(cell)) {
+            const value = findNearbyProjectValue(rows, r, c);
+            if (value) return value;
+          }
+        }
+      }
+
+      // Format B: project fields are headers, values are in the rows below.
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r] || [];
+        const normalized = row.map(normalizeHeader);
+        const foundIndex = normalized.findIndex(cell => aliasSet.has(cell));
+        if (foundIndex === -1) continue;
+        for (let rr = r + 1; rr < Math.min(rows.length, r + 10); rr++) {
+          const value = String((rows[rr] || [])[foundIndex] ?? '').trim();
+          if (value) return value;
+        }
+      }
+      return '';
+    }
+    function setProjectInfoFieldIfBlank(id, value) {
+      const field = document.getElementById(id);
+      if (!field) return false;
+      const text = String(value || '').trim();
+      if (!text || String(field.value || '').trim()) return false;
+      field.value = text;
+      clearMandatoryHighlightForField(field);
+      return true;
+    }
+    function autoPopulateProjectInformation(workbook) {
+      if (!workbook || !workbook.SheetNames) return;
+      const config = [
+        { id: 'reportProjectNo', aliases: ['Project No.', 'Project No', 'Project Number', 'Project Ref', 'Project Reference'] },
+        { id: 'reportLocation', aliases: ['Location:', 'Location', 'Work Location', 'Site Location', 'Address'] },
+        { id: 'contractor', aliases: ['Contractor:', 'Contractor', 'Contractor Name', 'Name of Contractor'] }
+      ];
+      const found = {};
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
+        config.forEach(item => {
+          if (found[item.id]) return;
+          const value = findProjectInfoValue(rows, item.aliases);
+          if (value) found[item.id] = value;
+        });
+      });
+      Object.entries(found).forEach(([id, value]) => setProjectInfoFieldIfBlank(id, value));
+    }
+    function pointLabel(item, extraText = '') { const ipidText = item.ipid ? `, IPID ${item.ipid}` : ''; return `Point ${item.point}${ipidText}${extraText}`; }
+    function calculateDimension(ducts, count, diameter) { if (Number.isNaN(ducts) || Number.isNaN(count) || Number.isNaN(diameter)) return NaN; if (ducts < 6) return (count * diameter) + (25 * (count - 1)); if (ducts <= 16) return (count * diameter) + (25 * (count - 1)) + 100; return (count * diameter) + (25 * (count - 1)) + 200; }
+    function selectedWholeQtyOrDefault(checkboxId, qtyInputId, defaultQty = 1) { const checkbox = document.getElementById(checkboxId); if (!checkbox || !checkbox.checked) return 0; const parsed = Number(String(document.getElementById(qtyInputId)?.value || '').trim()); return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultQty; }
+    function positiveWholeNumberOrZero(value) { const parsed = Number(String(value || '').trim()); return Number.isInteger(parsed) && parsed > 0 ? parsed : 0; }
+    function todayIsoDate() {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function applyPastDateMax(input) {
+      if (input) input.max = todayIsoDate();
+    }
+    function isFutureDate(value) {
+      if (!value) return false;
+      return String(value) > todayIsoDate();
+    }
+    function getUniqueIpidsFromCurrentRows() { return uniqueValues(currentRows.map(item => item.ipid)).sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })); }
+    function getDuctQtyByIpid(ipidNo) {
+      const selectedIpid = String(ipidNo || '').trim();
+      if (!selectedIpid) return 0;
+
+      const ductValues = currentRows
+        .filter(item => String(item.ipid || '').trim() === selectedIpid)
+        .map(item => Number.isNaN(item.ducts) ? 0 : Math.round(item.ducts))
+        .filter(value => Number.isInteger(value) && value > 0);
+
+      return ductValues.length ? Math.max(...ductValues) : 0;
+    }
+    function getExpectedDiameterByPipeSize(pipeSize) {
+      const size = String(pipeSize || '').trim().toUpperCase();
+      if (size === 'P110') return 110;
+      if (size === 'P50') return 50;
+      return NaN;
+    }
+    function getDiameterByIpid(ipidNo) {
+      const selectedIpid = String(ipidNo || '').trim();
+      if (!selectedIpid) return NaN;
+
+      const diameterValues = currentRows
+        .filter(item => String(item.ipid || '').trim() === selectedIpid)
+        .map(item => Number(item.diameter))
+        .filter(value => !Number.isNaN(value) && value > 0);
+
+      return diameterValues.length ? Math.max(...diameterValues) : NaN;
+    }
+    function isMatchingPipeDiameter(pipeSize, excelDiameter) {
+      const expected = getExpectedDiameterByPipeSize(pipeSize);
+      if (Number.isNaN(expected) || Number.isNaN(Number(excelDiameter))) return true;
+      return Math.round(Number(excelDiameter)) === expected;
+    }
+    function buildIpidOptions(selectedValue = '', usedBefore = new Set()) {
+      const selected = String(selectedValue || '').trim();
+      const options = ['<option value="">Select IPID</option>'];
+      getUniqueIpidsFromCurrentRows().forEach(ipid => {
+        if (usedBefore.has(ipid) && ipid !== selected) return;
+        const safe = escapeHtml(ipid);
+        options.push(`<option value="${safe}" ${ipid === selected ? 'selected' : ''}>${safe}</option>`);
+      });
+      return options.join('');
+    }
+    function refreshManholeIpidDropdowns() {
+      const usedBefore = new Set();
+      document.querySelectorAll('.manhole-ipid').forEach(select => {
+        let selected = String(select.value || '').trim();
+        if (selected && usedBefore.has(selected)) selected = '';
+        select.innerHTML = buildIpidOptions(selected, usedBefore);
+        select.value = selected;
+        if (selected) usedBefore.add(selected);
+      });
+    }
+
+    function buildResultTable() {
+      const table = document.getElementById('resultTable'); table.innerHTML = '';
+      const thead = document.createElement('thead'); const headRow = document.createElement('tr');
+      TABLE_HEADERS.forEach(header => { const th = document.createElement('th'); th.textContent = header; headRow.appendChild(th); });
+      thead.appendChild(headRow); const tbody = document.createElement('tbody'); table.appendChild(thead); table.appendChild(tbody); return tbody;
+    }
+    function renderErrorMessages(messages) {
+      const cleanMessages = uniqueValues(messages);
+      if (cleanMessages.length > 0) {
+        alert('Error in data\n\n' + cleanMessages.map((msg, index) => `${index + 1}. ${msg}`).join('\n') + '\n\nPlease update the file before uploading it');
+      }
+      return cleanMessages.length;
+    }
+
+    function hideGeneratedSections() {
+      clearMandatoryHighlights();
+      ['manholeCard','resultCard','pipeAcceptanceCard','claimsCard','swpOutputCard'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      document.getElementById('generateSwpBtn').disabled = true;
+      const table = document.getElementById('resultTable');
+      if (table) table.innerHTML = '';
+      const output = document.getElementById('swpOutput');
+      if (output) output.innerHTML = '';
+    }
+
+    function processFile() {
+      clearMessage();
+      hideGeneratedSections();
+      if (typeof XLSX === 'undefined') { showMessage('Excel library could not be loaded. Please check your internet connection because this page uses the XLSX CDN library.', 'error'); return; }
+      const input = document.getElementById('fileInput');
+      const decimals = 2;
+      if (!input.files || !input.files[0]) { showMessage('Please upload an Excel file first.', 'error'); return; }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: false });
+          autoPopulateProjectInformation(workbook);
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', blankrows: false });
+          const headerRowIndex = findHeaderRow(rows);
+          if (headerRowIndex === -1) throw new Error('Unable to find the header row containing Xcoordinate and Ycoordinate.');
+
+          const headers = rows[headerRowIndex];
+          const xIndex = findColumnIndex(headers, ['Xcoordinate']);
+          const yIndex = findColumnIndex(headers, ['Ycoordinate']);
+          const levelIndex = findColumnIndex(headers, ['Top Level [Z coordinate]', 'Top Level Z coordinate', 'Z coordinate', 'Top Level']);
+          const ductsIndex = findColumnIndex(headers, ['No. of Ducts', 'No of Ducts', 'Number of Ducts']);
+          const haunchIndex = findColumnIndex(headers, ['Haunches', 'Haunch', 'Haunch Required']);
+          const ipidIndex = findColumnIndex(headers, ['IPID']);
+          const heightIndex = findColumnIndex(headers, ['Height']);
+          const widthIndex = findColumnIndex(headers, ['Width']);
+          const diameterIndex = findColumnIndex(headers, ['Diameter of Ducts', 'Diameter of  Ducts', 'Duct Diameter']);
+          const columnsIndex = findColumnIndex(headers, ['No. of Columns', 'No of Columns', 'Number of Columns']);
+          const rowCountIndex = findColumnIndex(headers, ['No. of Rows', 'No of Rows', 'Number of Rows']);
+          if (xIndex === -1 || yIndex === -1 || ductsIndex === -1) throw new Error('Required columns are missing. Please check that Xcoordinate, Ycoordinate, and No. of Ducts exist.');
+
+          const parsedRows = rows.slice(headerRowIndex + 1)
+            .filter(row => row.some(cell => String(cell).trim() !== ''))
+            .map((row, idx) => ({
+              point: idx + 1,
+              x: toNumber(row[xIndex]), y: toNumber(row[yIndex]),
+              level: levelIndex >= 0 ? toNumber(row[levelIndex]) : NaN,
+              ducts: toNumber(row[ductsIndex]),
+              haunches: haunchIndex >= 0 ? String(row[haunchIndex] ?? '').trim() : '',
+              ipid: ipidIndex >= 0 ? String(row[ipidIndex] ?? '').trim() : '',
+              height: heightIndex >= 0 ? toNumber(row[heightIndex]) : NaN,
+              width: widthIndex >= 0 ? toNumber(row[widthIndex]) : NaN,
+              diameter: diameterIndex >= 0 ? toNumber(row[diameterIndex]) : NaN,
+              columns: columnsIndex >= 0 ? toNumber(row[columnsIndex]) : NaN,
+              rowCount: rowCountIndex >= 0 ? toNumber(row[rowCountIndex]) : NaN,
+              length: 0,
+              lengthText: '0.00'
+            }))
+            .filter(item => !Number.isNaN(item.x) || !Number.isNaN(item.y) || !Number.isNaN(item.ducts) || item.ipid !== '');
+
+          if (parsedRows.length === 0) throw new Error('No usable data rows were found after the header row.');
+
+          const ipidOrderMap = {};
+          const ipidPointCounters = {};
+          let ipidSequence = 0;
+          parsedRows.forEach(item => {
+            const ipidKey = String(item.ipid || '').trim() || `Blank IPID ${item.point}`;
+            if (!ipidOrderMap[ipidKey]) {
+              ipidOrderMap[ipidKey] = numberToLetters(++ipidSequence);
+              ipidPointCounters[ipidKey] = 0;
+            }
+            item.originalPoint = item.point;
+            item.point = `${ipidOrderMap[ipidKey]}${++ipidPointCounters[ipidKey]}`;
+          });
+
+          const xyErrors = [], levelErrors = [], haunchErrors = [], heightErrors = [], widthErrors = [];
+          parsedRows.forEach((item, index) => {
+            const next = parsedRows[index + 1];
+            const sameIPID = next && item.ipid && next.ipid && item.ipid === next.ipid;
+            if (!Number.isNaN(item.x) && !Number.isNaN(item.y) && next && sameIPID && !Number.isNaN(next.x) && !Number.isNaN(next.y)) {
+              const dx = next.x - item.x; const dy = next.y - item.y;
+              item.length = Math.sqrt(dx * dx + dy * dy);
+              item.lengthText = item.length.toFixed(decimals);
+              if (Number(item.lengthText) >= 21) xyErrors.push(pointLabel(item, ` to Point ${next.point}, Length ${item.lengthText}`));
+            }
+            if (Number.isNaN(item.level) || item.level >= 40) levelErrors.push(pointLabel(item, Number.isNaN(item.level) ? ', Top Level is invalid / missing' : `, Top Level ${item.level} is not below 40`));
+            const bypassHaunchCheck = document.getElementById('haunchingNotDone')?.checked;
+            if (!bypassHaunchCheck && !Number.isNaN(item.ducts) && item.ducts >= 4) {
+              const haunchValue = String(item.haunches || '').trim().toLowerCase();
+              if (haunchValue !== 'yes') {
+                const displayValue = item.haunches ? `"${item.haunches}"` : 'blank / missing';
+                haunchErrors.push(pointLabel(item, `, Haunch required but Excel Haunches is ${displayValue}`));
+              }
+            }
+            const calculatedHeight = calculateDimension(item.ducts, item.rowCount, item.diameter);
+            if (Number.isNaN(calculatedHeight) || Number.isNaN(item.height)) heightErrors.push(pointLabel(item, ', Missing data for Height Check'));
+            else if (!isSameNumber(calculatedHeight, item.height)) heightErrors.push(pointLabel(item, `, Excel Height ${item.height}, Calculated ${calculatedHeight}`));
+            const calculatedWidth = calculateDimension(item.ducts, item.columns, item.diameter);
+            if (Number.isNaN(calculatedWidth) || Number.isNaN(item.width)) widthErrors.push(pointLabel(item, ', Missing data for Width Check'));
+            else if (!isSameNumber(calculatedWidth, item.width)) widthErrors.push(pointLabel(item, `, Excel Width ${item.width}, Calculated ${calculatedWidth}`));
+          });
+
+          const errorMessages = [];
+          uniqueValues(xyErrors).forEach(item => errorMessages.push(`[X,Y Check] ${item}`));
+          uniqueValues(levelErrors).forEach(item => errorMessages.push(`[Level Check] ${item}`));
+          uniqueValues(haunchErrors).forEach(item => errorMessages.push(`[Haunch Check] ${item}`));
+          uniqueValues(heightErrors).forEach(item => errorMessages.push(`[Height Check] ${item}`));
+          uniqueValues(widthErrors).forEach(item => errorMessages.push(`[Width Check] ${item}`));
+
+          if (errorMessages.length > 0) {
+            currentRows = [];
+            hideGeneratedSections();
+            renderErrorMessages(errorMessages);
+            return;
+          }
+
+          currentRows = parsedRows;
+          refreshManholeIpidDropdowns();
+          const tbody = buildResultTable();
+          currentRows.forEach((item, index) => {
+            const hasLength = Number(item.lengthText) > 0;
+            const surfaceCell = hasLength
+              ? `<select class="cell-select surface-select" required aria-label="Surface for point ${item.point}"><option value="">Select Surface</option><option value="Soil">Soil</option><option value="Footpath">Footpath</option><option value="Carriageway">Carriageway</option><option value="Across carriageway">Across Carriageway</option><option value="Tunnel">Tunnel</option></select>`
+              : '';
+            const commonCell = hasLength
+              ? `<select class="cell-select common-input" aria-label="Common Trench for point ${item.point}"><option value="">NA</option><option value="Area A">Area A</option><option value="Area B">Area B</option><option value="Area C">Area C</option><option value="Area D">Area D</option><option value="Area E">Area E</option></select>`
+              : '';
+            const tr = document.createElement('tr');
+            tr.dataset.rowIndex = String(index);
+            tr.innerHTML = `
+              <td>${item.point}</td>
+              <td>${escapeHtml(item.ipid)}</td>
+              <td>${Number.isNaN(item.x) ? '' : escapeHtml(item.x)}</td>
+              <td>${Number.isNaN(item.y) ? '' : escapeHtml(item.y)}</td>
+              <td>${surfaceCell}</td>
+              <td>${commonCell}</td>
+              <td>${escapeHtml(item.lengthText)}</td>`;
+            tbody.appendChild(tr);
+            const surfaceSelect = tr.querySelector('.surface-select');
+            const commonInput = tr.querySelector('.common-input');
+            if (surfaceSelect) surfaceSelect.addEventListener('change', () => clearMandatoryHighlightForField(surfaceSelect));
+            if (commonInput) commonInput.addEventListener('change', () => clearMandatoryHighlightForField(commonInput));
+          });
+
+          document.getElementById('resultCard').classList.remove('hidden');
+          document.getElementById('manholeCard').classList.remove('hidden');
+          document.getElementById('pipeAcceptanceCard').classList.remove('hidden');
+          updatePipeAcceptanceChecklistByPipeSizes();
+          document.getElementById('claimsCard').classList.remove('hidden');
+          document.getElementById('generateSwpBtn').disabled = false;
+          document.getElementById('swpOutputCard').classList.add('hidden');
+          showMessage(`Generated ${currentRows.length} rows successfully from sheet: ${firstSheetName}.`, 'success');
+        } catch (err) {
+          currentRows = [];
+          hideGeneratedSections();
+          alert('Error in data\n\n1. ' + (err.message || 'Unable to process the file.') + '\n\nPlease update the file before uploading it');
+        }
+      };
+      reader.onerror = function() { alert('Error in data\n\n1. Unable to read the uploaded file.\n\nPlease update the file before uploading it'); };
+      reader.readAsArrayBuffer(input.files[0]);
+    }
+
+    function getReinstatementFactor(surface, ways, columns) {
+      const cleanSurface = String(surface || '').trim();
+      const wayCount = Math.max(1, Math.round(Number(ways) || 1));
+      const colCount = Math.max(1, Math.round(Number(columns) || 1));
+
+      // K-factor is based on the Maximum Allowable Trench Width for Reinstatement table.
+      // Values are stored in metres. For Below 16W, columns 1 to 4 are matched exactly.
+      // For 16W & Above, use the 16W & Above table rows.
+      const below16 = [
+        { minCol: 1, maxCol: 1, Soil: 1.00, Footpath: 1.52, Carriageway: 0.53, 'Across carriageway': 0.53 },
+        { minCol: 2, maxCol: 2, Soil: 1.00, Footpath: 1.52, Carriageway: 0.55, 'Across carriageway': 0.55 },
+        { minCol: 3, maxCol: 3, Soil: 1.00, Footpath: 1.52, Carriageway: 0.68, 'Across carriageway': 0.68 },
+        { minCol: 4, maxCol: 4, Soil: 1.40, Footpath: 1.52, Carriageway: 0.82, 'Across carriageway': 0.82 }
+      ];
+      const sixteenAndAbove = [
+        { minCol: 1, maxCol: 4, Soil: 1.80, Footpath: 1.52, Carriageway: 1.02, 'Across carriageway': 1.02 },
+        { minCol: 5, maxCol: 5, Soil: 2.00, Footpath: 1.52, Carriageway: 1.15, 'Across carriageway': 1.15 },
+        { minCol: 6, maxCol: 6, Soil: 2.20, Footpath: 1.52, Carriageway: 1.29, 'Across carriageway': 1.29 },
+        { minCol: 7, maxCol: 7, Soil: 2.40, Footpath: 1.52, Carriageway: 1.42, 'Across carriageway': 1.42 },
+        { minCol: 8, maxCol: 8, Soil: 2.70, Footpath: 1.52, Carriageway: 1.56, 'Across carriageway': 1.56 },
+        { minCol: 9, maxCol: 9, Soil: 3.00, Footpath: 1.62, Carriageway: 1.69, 'Across carriageway': 1.69 },
+        { minCol: 10, maxCol: 10, Soil: 3.20, Footpath: 1.75, Carriageway: 1.83, 'Across carriageway': 1.83 },
+        { minCol: 11, maxCol: 11, Soil: 3.40, Footpath: 1.87, Carriageway: 1.96, 'Across carriageway': 1.96 },
+        { minCol: 12, maxCol: 12, Soil: 3.50, Footpath: 2.00, Carriageway: 2.10, 'Across carriageway': 2.10 }
+      ];
+      const table = wayCount >= 16 ? sixteenAndAbove : below16;
+      const row = table.find(item => colCount >= item.minCol && colCount <= item.maxCol) || table[table.length - 1];
+      return row[cleanSurface] || 0;
+    }
+
+    function calculateReinstatementTotalsByPoint(rows) {
+      const totals = { '9.1': 0, '9.2': 0, '9.3': 0, '9.4': 0 };
+      const commonGroups = {};
+
+      rows.forEach(row => {
+        if (!row || !row.ipid || !row.surface || row.surface === 'Tunnel' || !row.length || row.length <= 0) return;
+
+        const ducts = Number.isNaN(row.ducts) ? 0 : Math.round(row.ducts);
+        let columns = Number.isNaN(row.columns) ? 0 : Math.round(row.columns);
+        if (ducts > 0 && columns <= 0) columns = 1;
+
+        const common = String(row.commonTrench || '').trim();
+        const itemNo = row.surface === 'Carriageway' ? '9.1'
+          : row.surface === 'Across carriageway' ? '9.2'
+          : row.surface === 'Footpath' ? '9.3'
+          : row.surface === 'Soil' ? '9.4'
+          : '';
+        if (!itemNo) return;
+
+        if (common) {
+          const groupKey = row.surface + '|' + common;
+          if (!commonGroups[groupKey]) {
+            commonGroups[groupKey] = { itemNo, surface: row.surface, ipids: {} };
+          }
+          if (!commonGroups[groupKey].ipids[row.ipid]) {
+            commonGroups[groupKey].ipids[row.ipid] = { length: 0, ducts: 0, columns: 0 };
+          }
+
+          const ipidData = commonGroups[groupKey].ipids[row.ipid];
+          ipidData.length += row.length;
+          ipidData.ducts = Math.max(ipidData.ducts, ducts);
+          ipidData.columns = Math.max(ipidData.columns, columns);
+        } else {
+          const factor = getReinstatementFactor(row.surface, ducts, columns);
+          if (!factor) return;
+          totals[itemNo] += row.length * factor;
+        }
+      });
+
+      Object.values(commonGroups).forEach(group => {
+        const ipidValues = Object.values(group.ipids);
+        if (!ipidValues.length) return;
+
+        // For Common Trench, the reinstatement width/K factor is based on the combined trench,
+        // so use the total columns and total ways across the participating IPIDs for that Area.
+        // Length is still taken as the shared trench route length, using the average IPID length.
+        const commonLength = ipidValues.reduce((sum, item) => sum + item.length, 0) / ipidValues.length;
+        const totalWays = ipidValues.reduce((sum, item) => sum + item.ducts, 0);
+        const totalColumns = ipidValues.reduce((sum, item) => sum + item.columns, 0);
+        const factor = getReinstatementFactor(group.surface, totalWays, totalColumns);
+        if (!factor) return;
+
+        totals[group.itemNo] += commonLength * factor;
+      });
+
+      return totals;
+    }
+
+    function getWarningSlabMultiplier(columns) {
+      const roundedColumns = Math.max(1, Math.round(Number(columns) || 1));
+      return Math.ceil(roundedColumns / 2);
+    }
+
+    function calculateWarningSlabQty(rows) {
+      let totalWarningSlabReferenceLength = 0;
+      const commonGroups = {};
+
+      rows.forEach(row => {
+        if (!row || !row.ipid || !row.length || row.length <= 0) return;
+
+        const ducts = Number.isNaN(row.ducts) ? 0 : Math.round(row.ducts);
+        let columns = Number.isNaN(row.columns) ? 0 : Math.round(row.columns);
+        if (ducts > 0 && columns <= 0) columns = 1;
+        if (columns <= 0) columns = 1;
+
+        const common = String(row.commonTrench || '').trim();
+
+        if (common) {
+          const groupKey = (row.surface || 'NA') + '|' + common;
+          if (!commonGroups[groupKey]) commonGroups[groupKey] = { ipids: {} };
+          if (!commonGroups[groupKey].ipids[row.ipid]) {
+            commonGroups[groupKey].ipids[row.ipid] = { length: 0, columns: 0 };
+          }
+          const ipidData = commonGroups[groupKey].ipids[row.ipid];
+          ipidData.length += row.length;
+          ipidData.columns = Math.max(ipidData.columns, columns);
+        } else {
+          totalWarningSlabReferenceLength += row.length * getWarningSlabMultiplier(columns);
+        }
+      });
+
+      Object.values(commonGroups).forEach(group => {
+        const ipidValues = Object.values(group.ipids || {});
+        if (!ipidValues.length) return;
+
+        // Common Trench warning slab is based on the shared trench route length
+        // and the total combined columns for that Area, instead of each individual point.
+        const commonLength = ipidValues.reduce((sum, item) => sum + (item.length || 0), 0) / ipidValues.length;
+        const totalColumns = ipidValues.reduce((sum, item) => sum + (item.columns || 0), 0);
+        totalWarningSlabReferenceLength += commonLength * getWarningSlabMultiplier(totalColumns);
+      });
+
+      const twoDecimalReference = Math.round((totalWarningSlabReferenceLength + Number.EPSILON) * 100) / 100;
+      return Math.ceil(twoDecimalReference);
+    }
+
+    function readResultRowsForSwp() {
+      return Array.from(document.querySelectorAll('#resultTable tbody tr')).map(tr => {
+        const idx = Number(tr.dataset.rowIndex);
+        const row = currentRows[idx];
+        return {
+          ...row,
+          surface: tr.querySelector('.surface-select')?.value || '',
+          commonTrench: tr.querySelector('.common-input')?.value.trim() || '',
+          length: Number.isNaN(row.length) ? 0 : row.length
+        };
+      });
+    }
+
+    function getClaimExportRows() {
+      const claims = [
+        { name: '50mm Asphalt', checkboxId: 'claimAsphalt50', qtyInputId: '' },
+        { name: '75mm Asphalt', checkboxId: 'claimAsphalt75', qtyInputId: '' },
+        { name: 'TMA', checkboxId: 'claimTma', qtyInputId: 'claimTmaQty' },
+        { name: 'Water Tank', checkboxId: 'claimWaterTank', qtyInputId: 'claimWaterTankQty' },
+        { name: 'Milling & Patching', checkboxId: 'claimMillingPatching', qtyInputId: 'claimMillingPatchingQty' },
+        { name: 'Wayleave Application (13.2)', checkboxId: 'claimWayleave', qtyInputId: 'claimWayleaveQty' },
+        { name: 'Auxiliary Security Officer (ASO)', checkboxId: 'claimAso', qtyInputId: 'claimAsoQty' }
+      ];
+
+      return claims.map(claim => {
+        const selected = !!document.getElementById(claim.checkboxId)?.checked;
+        const rawQty = claim.qtyInputId ? (document.getElementById(claim.qtyInputId)?.value || '').trim() : '';
+        let finalQty = '';
+        if (claim.qtyInputId && selected) finalQty = selectedWholeQtyOrDefault(claim.checkboxId, claim.qtyInputId, 1);
+        return [claim.name, selected ? 'Yes' : 'No', rawQty, finalQty];
+      });
+    }
+
+
+    function getPipeAcceptanceExportRows() {
+      const checklistRows = [
+        ['Pipe Acceptance Checklist', 'Selected', 'Reason'],
+        ['Size of draw rope provided (6mm)', isChecked('checkDrawRope') ? 'Yes' : 'No', ''],
+        ['Abandoned pipe(s) has/have been marked in red on MH wall', isChecked('checkAbandonedMarked') ? 'Yes' : 'No', ''],
+        ['P110 - Mandrel through for P110 pipe (dia. 83mm)', isChecked('checkP110Through') ? 'Yes' : 'No', ''],
+        ['P110 - Mandrel not through for P110 pipe, Spiral Mandrel (size 95mm) through', isChecked('checkSpiralThrough') ? 'Yes' : 'No', inputValue('reasonSpiralThrough')],
+        ['P110 - Mandrel and Spiral Mandrel not through', isChecked('checkMandrelNotThrough') ? 'Yes' : 'No', inputValue('reasonMandrelNotThrough')],
+        ['P50 - Spiral Mandrel for P50 pipe (size 44mm) through', isChecked('checkP50Through') ? 'Yes' : 'No', ''],
+        ['P50 - Spiral Mandrel not through, use 1 inch sub duct (25mm)', isChecked('checkSubDuct') ? 'Yes' : 'No', ''],
+        [],
+        ['Photo List Checklist', 'Status', ''],
+        ['a) Pipe length for each type of trench surface, trench width, trench depth', inputValue('photoA') || 'No', ''],
+        ['b) Pipe encasement sand, quarry dust or concrete', inputValue('photoB') || 'No', ''],
+        ['c) Pipe spacers between installed pipes', inputValue('photoC') || 'No', ''],
+        ['d) Fabric wire reinforcement for pipeline 16W & above', inputValue('photoD') || 'No', ''],
+        ['e) Strutting & shoring for trench depth > 1.5m', inputValue('photoE') || 'No', ''],
+        ['f) Reinstatement length, width for each type of trench surface', inputValue('photoF') || 'No', '']
+      ];
+      return checklistRows;
+    }
+
+    function isSkippableAutoPlaceholderRow(row) {
+      if (!row || !row.dataset.autoSource) return false;
+      const pipeSize = row.querySelector('.manhole-pipe-size')?.value.trim() || '';
+      const manholeA = row.querySelector('.manhole-a')?.value.trim() || '';
+      const isNewA = !!row.querySelector('.manhole-a-new')?.checked;
+      const ipidNo = row.querySelector('.manhole-ipid')?.value.trim() || '';
+      const pipeTestDate = row.querySelector('.pipe-test-date')?.value.trim() || '';
+      const bMode = row.querySelector('.manhole-b-mode')?.value || 'text';
+      const manholeB = row.querySelector('.manhole-b-text')?.value.trim() || '';
+      const isNewB = !!row.querySelector('.manhole-b-new')?.checked;
+      return manholeA !== '' && !pipeSize && !isNewA && !ipidNo && !pipeTestDate && bMode === 'text' && !manholeB && !isNewB;
+    }
+
+    function clearMandatoryHighlightForField(field) {
+      if (!field) return;
+      field.classList.remove('mandatory-error');
+      const row = field.closest('tr');
+      if (row && !row.querySelector('.mandatory-error')) row.classList.remove('has-mandatory-error');
+    }
+
+    function clearMandatoryHighlights() {
+      document.querySelectorAll('.mandatory-error').forEach(el => el.classList.remove('mandatory-error'));
+      document.querySelectorAll('tr.has-mandatory-error').forEach(row => row.classList.remove('has-mandatory-error'));
+    }
+
+    function markMandatoryField(field) {
+      if (!field) return;
+      field.classList.add('mandatory-error');
+      const row = field.closest('tr');
+      if (row) row.classList.add('has-mandatory-error');
+    }
+
+    function markBlankManholeRow(row) {
+      if (!row) return;
+      markMandatoryField(row.querySelector('.manhole-pipe-size'));
+      markMandatoryField(row.querySelector('.manhole-a'));
+      markMandatoryField(row.querySelector('.manhole-ipid'));
+      markMandatoryField(row.querySelector('.pipe-test-date'));
+      const mode = row.querySelector('.manhole-b-mode');
+      const bText = row.querySelector('.manhole-b-text');
+      if (mode?.value !== 'lead-in') {
+        markMandatoryField(mode);
+        markMandatoryField(bText);
+      }
+    }
+
+    function validateMandatoryInputsBeforeSummary() {
+      syncNewManholeTags();
+      clearMandatoryHighlights();
+      const errors = [];
+      const projectFields = [
+        ['contractor', 'Project Information: Contractor is required.'],
+        ['reportProjectNo', 'Project Information: Project No. is required.'],
+        ['serviceOrderNo', 'Project Information: Service Order No. is required.'],
+        ['reportLocation', 'Project Information: Location is required.'],
+        ['ltaApplicationNo', 'Project Information: LTA Application No. is required.'],
+        ['pipelineSupervisor', 'Project Information: Pipeline Supervisor is required.'],
+        ['workCompletedOn', 'Project Information: Work Completed On is required.']
+      ];
+      projectFields.forEach(([id, message]) => {
+        const field = document.getElementById(id);
+        if (!field || !String(field.value || '').trim()) {
+          markMandatoryField(field);
+          errors.push(message);
+        }
+      });
+      const workCompletedField = document.getElementById('workCompletedOn');
+      applyPastDateMax(workCompletedField);
+      if (workCompletedField && isFutureDate(workCompletedField.value)) {
+        markMandatoryField(workCompletedField);
+        errors.push('Project Information: Work Completed On must be today or a past date.');
+      }
+      const allowedSurfaces = new Set(['Soil', 'Footpath', 'Carriageway', 'Across carriageway', 'Across Carriageway', 'Tunnel']);
+
+      const manholeDomRows = Array.from(document.querySelectorAll('#manholeRows tr'));
+      let activeManholeRowCount = 0;
+
+      manholeDomRows.forEach((row, index) => {
+        if (isSkippableAutoPlaceholderRow(row)) return;
+
+        const rowNo = index + 1;
+        const pipeSizeEl = row.querySelector('.manhole-pipe-size');
+        const manholeAEl = row.querySelector('.manhole-a');
+        const ipidEl = row.querySelector('.manhole-ipid');
+        const pipeTestDateEl = row.querySelector('.pipe-test-date');
+        const modeEl = row.querySelector('.manhole-b-mode');
+        const manholeBEl = row.querySelector('.manhole-b-text');
+        const pipeSize = pipeSizeEl?.value.trim() || '';
+        const manholeA = manholeAEl?.value.trim() || '';
+        const ipidNo = ipidEl?.value.trim() || '';
+        const pipeTestDate = pipeTestDateEl?.value.trim() || '';
+        const bMode = modeEl?.value || 'text';
+        const manholeBText = manholeBEl?.value.trim() || '';
+        const isNewA = !!row.querySelector('.manhole-a-new')?.checked;
+        const isNewB = !!row.querySelector('.manhole-b-new')?.checked;
+        const hasAnyInput = pipeSize || manholeA || ipidNo || pipeTestDate || manholeBText || bMode === 'lead-in' || isNewA || isNewB;
+
+        if (!hasAnyInput) return;
+        activeManholeRowCount += 1;
+
+        if (!pipeSize) { markMandatoryField(pipeSizeEl); errors.push(`Section 1 Row ${rowNo}: Pipe Size is required. Select P50 or P110.`); }
+        if (!manholeA) { markMandatoryField(manholeAEl); errors.push(`Section 1 Row ${rowNo}: Manhole A is required.`); }
+        if (!ipidNo) { markMandatoryField(ipidEl); errors.push(`Section 1 Row ${rowNo}: IPID No. is required.`); }
+        if (!pipeTestDate) { markMandatoryField(pipeTestDateEl); errors.push(`Section 1 Row ${rowNo}: Pipe Test Date is required.`); }
+        else if (isFutureDate(pipeTestDate)) { markMandatoryField(pipeTestDateEl); errors.push(`Section 1 Row ${rowNo}: Pipe Test Date must be today or a past date.`); }
+        if (bMode !== 'lead-in' && !manholeBText) {
+          markMandatoryField(modeEl);
+          markMandatoryField(manholeBEl);
+          errors.push(`Section 1 Row ${rowNo}: Manhole B is required. Select "To lead-in Pipe" or enter a Manhole B value.`);
+        }
+        if (pipeSize && ipidNo) {
+          const excelDiameter = getDiameterByIpid(ipidNo);
+          const expectedDiameter = getExpectedDiameterByPipeSize(pipeSize);
+          if (!Number.isNaN(excelDiameter) && !Number.isNaN(expectedDiameter) && !isMatchingPipeDiameter(pipeSize, excelDiameter)) {
+            markMandatoryField(pipeSizeEl);
+            markMandatoryField(ipidEl);
+            errors.push(`Section 1 Row ${rowNo}: Pipe Size ${pipeSize} does not match IPID ${ipidNo} diameter. Expected ${expectedDiameter}mm but Excel diameter is ${excelDiameter}mm.`);
+          }
+        }
+      });
+
+      if (activeManholeRowCount === 0) {
+        markBlankManholeRow(manholeDomRows.find(row => !isSkippableAutoPlaceholderRow(row)) || manholeDomRows[0]);
+        errors.push('Section 1: At least one Dynamic Manhole Entry row is required.');
+      }
+
+      Array.from(document.querySelectorAll('#resultTable tbody tr')).forEach(tr => {
+        const idx = Number(tr.dataset.rowIndex);
+        const row = currentRows[idx];
+        if (!row) return;
+        const surfaceEl = tr.querySelector('.surface-select');
+        const surface = surfaceEl?.value || '';
+        const lengthValue = Number(row.lengthText || row.length || 0);
+        if (lengthValue > 0 && !allowedSurfaces.has(surface)) {
+          markMandatoryField(surfaceEl);
+          errors.push(`Section 2 Point ${row.point}${row.ipid ? `, IPID ${row.ipid}` : ''}: Surface is required. Select Soil, Footpath, Carriageway, Across Carriageway, or Tunnel.`);
+        }
+      });
+
+      // Common Trench validation rules:
+      // 1) Same Area must use the same Surface.
+      // 2) Each selected Area must be used by at least 2 different IPID numbers.
+      // 3) For each selected Area, the number of selected rows must be equal across participating IPIDs.
+      //    IPIDs with NA / zero count for that Area are ignored.
+      const commonGroupsById = {};
+      Array.from(document.querySelectorAll('#resultTable tbody tr')).forEach(tr => {
+        const idx = Number(tr.dataset.rowIndex);
+        const row = currentRows[idx];
+        if (!row) return;
+        const surfaceEl = tr.querySelector('.surface-select');
+        const commonEl = tr.querySelector('.common-input');
+        const surface = surfaceEl?.value || '';
+        const commonValue = commonEl?.value.trim() || '';
+        const lengthValue = Number(row.lengthText || row.length || 0);
+        if (lengthValue <= 0 || !surface || !commonValue) return;
+        const groupKey = normalize(commonValue);
+        if (!commonGroupsById[groupKey]) commonGroupsById[groupKey] = { commonValue, rows: [] };
+        commonGroupsById[groupKey].rows.push({
+          point: row.point,
+          ipid: String(row.ipid || '').trim(),
+          surface,
+          surfaceEl,
+          commonEl
+        });
+      });
+
+      Object.values(commonGroupsById).forEach(group => {
+        if (group.rows.length <= 0) return;
+
+        const uniqueSurfaces = new Set(group.rows.map(item => item.surface));
+        if (uniqueSurfaces.size > 1) {
+          group.rows.forEach(item => {
+            markMandatoryField(item.surfaceEl);
+            markMandatoryField(item.commonEl);
+          });
+          errors.push(`Common Trench Error: Different Surface - ${group.commonValue} contains multiple surfaces (${Array.from(uniqueSurfaces).join(', ')}).`);
+          return;
+        }
+
+        const rowsByIpid = {};
+        group.rows.forEach(item => {
+          const key = item.ipid || `Point ${item.point}`;
+          if (!rowsByIpid[key]) rowsByIpid[key] = { ipid: key, count: 0, rows: [] };
+          rowsByIpid[key].count += 1;
+          rowsByIpid[key].rows.push(item);
+        });
+
+        const ipidGroups = Object.values(rowsByIpid);
+        if (ipidGroups.length <= 1) {
+          group.rows.forEach(item => {
+            markMandatoryField(item.surfaceEl);
+            markMandatoryField(item.commonEl);
+          });
+          errors.push(`Common Trench Error: Same IPID No. - ${group.commonValue} must be selected by at least 2 different IPID numbers.`);
+          return;
+        }
+
+        const selectedCounts = ipidGroups.map(item => item.count);
+        const minCount = Math.min(...selectedCounts);
+        const maxCount = Math.max(...selectedCounts);
+        if (minCount !== maxCount) {
+          group.rows.forEach(item => {
+            markMandatoryField(item.commonEl);
+          });
+          const countDetails = ipidGroups.map(item => `${item.ipid}: ${item.count}`).join(', ');
+          errors.push(`Common Trench Error: Unequal Area Selection - ${group.commonValue} must have the same number of selections for each participating IPID (${countDetails}).`);
+          return;
+        }
+
+      });
+
+      return errors;
+    }
+
+    function showSummaryValidationErrors(errors) {
+      document.getElementById('swpOutput').innerHTML = '';
+      document.getElementById('swpOutputCard').classList.add('hidden');
+      const cleanMessages = uniqueValues(errors);
+      const message = cleanMessages.length
+        ? 'Please complete or correct the highlighted fields before generating the summary.\n\n' + cleanMessages.map((msg, index) => `${index + 1}. ${msg}`).join('\n')
+        : 'Please complete the highlighted mandatory fields before generating the summary.';
+      showMessage(message, 'error');
+      const firstErrorField = document.querySelector('.mandatory-error');
+      if (firstErrorField) firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function getProjectInfoForPdf() {
+      return [
+        ['Contractor:', inputValue('contractor')],
+        ['Project No.:', inputValue('reportProjectNo')],
+        ['Service Order No.:', inputValue('serviceOrderNo')],
+        ['Location:', inputValue('reportLocation')],
+        ['LTA Application No.:', inputValue('ltaApplicationNo')],
+        ['Pipeline Supervisor:', inputValue('pipelineSupervisor')],
+        ['Work Completed On:', formatReportDate(inputValue('workCompletedOn'))],
+        ['Haunching not done:', document.getElementById('haunchingNotDone')?.checked ? 'Yes' : 'No']
+      ];
+    }
+
+    function getSelectedPipeSizesFromSection1() {
+      const selected = new Set();
+      readManholeRows().forEach(row => {
+        if (row.pipeSize === 'P50' || row.pipeSize === 'P110') selected.add(row.pipeSize);
+      });
+      return selected;
+    }
+
+    function addPdfFooter(doc) {
+      const pageCount = doc.internal.getNumberOfPages();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(9);
+        const startY = pageHeight - 24;
+        const colWidth = (pageWidth - 28) / 4;
+        const labels = ['Name', 'Signature', 'Company Stamp', 'Date'];
+        labels.forEach((label, idx) => {
+          const x = 14 + (idx * colWidth);
+          doc.text(label, x, startY);
+          doc.line(x, startY + 10, x + colWidth - 8, startY + 10);
+        });
+        doc.setFontSize(8);
+        doc.text(String(i), pageWidth - 14, pageHeight - 8, { align: 'right' });
+      }
+    }
+
+    function generateCompletionCertificatePdf(summaryList, swpItems) {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert('PDF library could not be loaded. Please check your internet connection and try again.');
+        return;
+      }
+      const doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      let y = 16;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('Version: A1.1', pageWidth - margin, y, { align: 'right' });
+      doc.setFontSize(16);
+      doc.text('Completion Certificate', pageWidth / 2, y, { align: 'center' });
+      y += 10;
+
+      doc.setFontSize(12);
+      doc.text('Project Information', margin, y);
+      y += 3;
+      doc.autoTable({
+        startY: y,
+        head: [],
+        body: getProjectInfoForPdf(),
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 45 }, 1: { cellWidth: 135 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      const pipeLengthRowsForPdf = readResultRowsForSwp().map(row => [
+        row.point,
+        row.ipid || '',
+        Number.isNaN(row.x) ? '' : String(row.x),
+        Number.isNaN(row.y) ? '' : String(row.y),
+        row.surface || '',
+        row.commonTrench || '',
+        row.lengthText || '0.00'
+      ]);
+      if (y > 220) { doc.addPage(); y = 16; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Pipe Length', margin, y);
+      doc.autoTable({
+        startY: y + 3,
+        head: [['Point', 'IPID', 'XCoordinate', 'YCoordinate', 'Surface', 'Common Trench', 'Length']],
+        body: pipeLengthRowsForPdf.length ? pipeLengthRowsForPdf : [['No pipe length records generated.', '', '', '', '', '', '']],
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 7.2, cellPadding: 1.5, halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 14 }, 1: { cellWidth: 30 }, 2: { cellWidth: 28 }, 3: { cellWidth: 28 }, 4: { cellWidth: 30 }, 5: { cellWidth: 34 }, 6: { cellWidth: 18 } },
+        tableWidth: pageWidth - (margin * 2),
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      if (y > 230) { doc.addPage(); y = 16; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Surface and Laying Summary', margin, y);
+      doc.autoTable({
+        startY: y + 3,
+        head: [['Surface', 'Trench ID', 'No. of Ways', 'Calculated Length (m)']],
+        body: summaryList.length ? summaryList.map(item => [item.surface, item.trenchId, String(item.ducts), item.length.toFixed(2)]) : [['No valid structural trench layouts found.', '', '', '']],
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 8.5, cellPadding: 2, halign: 'center', valign: 'middle' },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Generated SWP Priced Items', margin, y);
+      doc.autoTable({
+        startY: y + 3,
+        head: [['Item No', 'Description', 'Quantity']],
+        body: swpItems.length ? swpItems : [['No priced items generated.', '', '']],
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 8.5, cellPadding: 2, halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 24 }, 2: { cellWidth: 28 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      if (y > 230) { doc.addPage(); y = 16; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Pipe Acceptance Report', margin, y);
+      y += 3;
+
+      const selectedPipeSizes = getSelectedPipeSizesFromSection1();
+      const acceptanceRows = [
+        ['All', 'Size of draw rope provided (6mm)', isChecked('checkDrawRope') ? 'Yes' : 'No', ''],
+        ['All', 'Abandoned pipe(s) has/have been marked in red on MH wall', isChecked('checkAbandonedMarked') ? 'Yes' : 'No', '']
+      ];
+      if (selectedPipeSizes.has('P50')) {
+        acceptanceRows.push(['P50', 'Spiral Mandrel for P50 pipe (size 44mm) through', isChecked('checkP50Through') ? 'Yes' : 'No', '']);
+        acceptanceRows.push(['P50', 'Spiral Mandrel not through, use 1 inch sub duct (25mm)', isChecked('checkSubDuct') ? 'Yes' : 'No', '']);
+      }
+      if (selectedPipeSizes.has('P110')) {
+        acceptanceRows.push(['P110', 'Mandrel through for P110 pipe (dia. 83mm)', isChecked('checkP110Through') ? 'Yes' : 'No', '']);
+        acceptanceRows.push(['P110', 'Mandrel not through for P110 pipe, Spiral Mandrel (size 95mm) through', isChecked('checkSpiralThrough') ? 'Yes' : 'No', inputValue('reasonSpiralThrough')]);
+        acceptanceRows.push(['P110', 'Mandrel and Spiral Mandrel not through', isChecked('checkMandrelNotThrough') ? 'Yes' : 'No', inputValue('reasonMandrelNotThrough')]);
+      }
+      doc.autoTable({
+        startY: y,
+        head: [['Pipe Size', 'Checklist Item', 'Selected', 'Reason']],
+        body: acceptanceRows,
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 8.2, cellPadding: 2, halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 22 }, 2: { cellWidth: 22 }, 3: { cellWidth: 42 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      const photoRows = [
+        ['a)', 'Pipe length for each type of trench surface, trench width, trench depth', inputValue('photoA') || 'No'],
+        ['b)', 'Pipe encasement sand, quarry dust or concrete', inputValue('photoB') || 'No'],
+        ['c)', 'Pipe spacers between installed pipes', inputValue('photoC') || 'No'],
+        ['d)', 'Fabric wire reinforcement for pipeline 16W & above', inputValue('photoD') || 'No'],
+        ['e)', 'Strutting & shoring for trench depth > 1.5m', inputValue('photoE') || 'No'],
+        ['f)', 'Reinstatement length, width for each type of trench surface', inputValue('photoF') || 'No']
+      ];
+      doc.autoTable({
+        startY: y,
+        head: [['No.', 'Photo List Item', 'Status']],
+        body: photoRows,
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 8.2, cellPadding: 2, halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 16 }, 2: { cellWidth: 24 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      if (y > 232) { doc.addPage(); y = 16; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('Dynamic Manhole Entry', margin, y);
+      const dynamicManholeRows = readManholeRows().map(mh => [
+        mh.pipeSize,
+        mh.manholeA,
+        mh.isNewA ? 'Yes' : 'No',
+        mh.sameWallA ? 'Yes' : 'No',
+        mh.ipidNo,
+        mh.manholeB,
+        mh.isNewB ? 'Yes' : 'No',
+        mh.sameWallB ? 'Yes' : 'No',
+        formatReportDate(mh.pipeTestDate)
+      ]);
+      doc.autoTable({
+        startY: y + 3,
+        head: [['Pipe Size', 'Manhole A', 'New MH', 'Boring Same Wall', 'IPID No.', 'Manhole B', 'New MH', 'Boring Same Wall', 'Pipe Test Date']],
+        body: dynamicManholeRows.length ? dynamicManholeRows : [['No manhole connections entered.', '', '', '', '', '', '', '', '']],
+        theme: 'grid',
+        headStyles: { fillColor: [31, 78, 121], halign: 'center', valign: 'middle' },
+        styles: { fontSize: 7.2, cellPadding: 1.5, halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { cellWidth: 16 }, 2: { cellWidth: 13 }, 3: { cellWidth: 20 }, 6: { cellWidth: 20 }, 7: { cellWidth: 13 }, 8: { cellWidth: 21 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 8;
+
+      const confirmation = 'I confirm that the pipe testing, installation process were carried out accordingly to the specification & requirement of NetLink Trust outside plant works. The measurement given in the invoice are correct and accurate';
+      const frameHeight = 58;
+      if (y + frameHeight > 287) { doc.addPage(); y = 16; }
+
+      doc.setDrawColor(40, 40, 40);
+      doc.setLineWidth(0.25);
+      doc.rect(margin, y, pageWidth - (margin * 2), frameHeight);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      const lines = doc.splitTextToSize(confirmation, pageWidth - (margin * 2) - 8);
+      doc.text(lines, margin + 4, y + 7);
+
+      const signatureY = y + 39;
+      const labelY = signatureY + 6;
+      const colGap = 7;
+      const colWidth = ((pageWidth - (margin * 2)) - (colGap * 3) - 8) / 4;
+      const startX = margin + 4;
+      const labels = ['Name', 'Signature', 'Company Stamp', 'Date'];
+      labels.forEach((label, idx) => {
+        const x = startX + (idx * (colWidth + colGap));
+        doc.line(x, signatureY, x + colWidth, signatureY);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.text(label, x + (colWidth / 2), labelY, { align: 'center' });
+      });
+      const projectNo = inputValue('reportProjectNo') || 'Project';
+      const safeProjectNo = projectNo.replace(/[^a-z0-9_-]+/gi, '_');
+      doc.save(`Completion_Certificate_${safeProjectNo}.pdf`);
+    }
+
+    function generateSwpQuantities() {
+      syncNewManholeTags();
+      const mandatoryErrors = validateMandatoryInputsBeforeSummary();
+      if (mandatoryErrors.length) {
+        showSummaryValidationErrors(mandatoryErrors);
+        return;
+      }
+
+      const rows = readResultRowsForSwp();
+      const finalGroups = {};
+      rows.forEach(row => {
+        const ipid = row.ipid || '';
+        const ducts = Number.isNaN(row.ducts) ? 0 : Math.round(row.ducts);
+        let columns = Number.isNaN(row.columns) ? 0 : Math.round(row.columns);
+        if (ducts > 0 && columns <= 0) columns = 1;
+        const length = row.length || 0;
+        const surface = row.surface;
+        const commonRaw = row.commonTrench || '';
+        const commonNormalized = normalize(commonRaw);
+        if (!ipid || length <= 0 || !surface) return;
+        const isCommon = commonNormalized !== '';
+        const displayTrenchId = isCommon ? commonRaw : 'Non-Common';
+        // Common Trench rows are grouped only when both Surface and Common Trench ID are the same.
+        // For common trench, each IPID route length is totalled first. The summary length uses one matching IPID route length,
+        // while No. of Ways is the sum of ducts from the unique IPIDs in the common trench group.
+        const groupKey = isCommon ? surface + '|' + displayTrenchId : surface + '|Non-Common|' + ducts;
+        if (!finalGroups[groupKey]) finalGroups[groupKey] = { surface, trenchId: displayTrenchId, totalLength: 0, rowCount: 0, ductSum: 0, ipidData: {}, maxColumns: 0, maxDucts: 0, isCommon };
+        const group = finalGroups[groupKey];
+        group.totalLength += length;
+        group.rowCount += 1;
+        if (!group.ipidData[ipid]) group.ipidData[ipid] = { ducts, length: 0 };
+        group.ipidData[ipid].ducts = Math.max(group.ipidData[ipid].ducts || 0, ducts);
+        group.ipidData[ipid].length += length;
+        group.ductSum += ducts;
+        if (columns > group.maxColumns) group.maxColumns = columns;
+        if (ducts > group.maxDucts) group.maxDucts = ducts;
+      });
+
+      const allSummaryList = Object.values(finalGroups).map(group => {
+        let finalDucts = group.maxDucts;
+        let finalLength = group.totalLength;
+
+        if (group.isCommon) {
+          const ipidRoutes = Object.values(group.ipidData || {});
+          finalDucts = ipidRoutes.reduce((sum, item) => sum + (item.ducts || 0), 0);
+          finalLength = ipidRoutes.length
+            ? (Math.round(((ipidRoutes.reduce((sum, item) => sum + (item.length || 0), 0) / ipidRoutes.length) + Number.EPSILON) * 100) / 100)
+            : 0;
+        }
+
+        return { surface: group.surface, trenchId: group.trenchId, ducts: finalDucts, columns: group.maxColumns, length: finalLength };
+      });
+
+      const surfaceSortOrder = { 'Soil': 1, 'Footpath': 2, 'Carriageway': 3, 'Across carriageway': 4, 'Tunnel': 5 };
+      allSummaryList.sort((a,b) => (surfaceSortOrder[a.surface] ?? 999) - (surfaceSortOrder[b.surface] ?? 999) || a.ducts - b.ducts || String(a.trenchId).localeCompare(String(b.trenchId), undefined, {numeric:true}));
+
+      // Tunnel rows are claimable under Item 26 and are intentionally excluded from Surface and Laying Summary.
+      const summaryList = allSummaryList.filter(item => item.surface !== 'Tunnel');
+      const tunnelSummaryList = allSummaryList.filter(item => item.surface === 'Tunnel');
+      const tunnelTotalLength = tunnelSummaryList.reduce((sum, item) => sum + (Number(item.length) || 0), 0);
+
+      let surfaceTotals = { 'Soil':0, 'Carriageway':0, 'Across carriageway':0, 'Footpath':0 };
+      let totalLengthCalculated = 0;
+      let swp = { '1.4.15':0, '2':0, '2.1':0, '4.1':0, '9.1':0, '9.2':0, '9.3':0, '9.4':0, '9.5':0, '9.6':0, '9.7':0, '9.8':0, '9.9':0, '10.1':0, '10.2':0, '12.1':0, '12.3':0, '20':0, '21':0, '13.2':0, '26':0, '28':0 };
+      allSummaryList.forEach(r => {
+        totalLengthCalculated += r.length;
+        if (r.surface === 'Tunnel') return;
+        if (surfaceTotals[r.surface] !== undefined) surfaceTotals[r.surface] += r.length;
+      });
+      const reinstatementTotals = calculateReinstatementTotalsByPoint(rows);
+      swp['9.1'] = reinstatementTotals['9.1'];
+      swp['9.2'] = reinstatementTotals['9.2'];
+      swp['9.3'] = reinstatementTotals['9.3'];
+      swp['9.4'] = reinstatementTotals['9.4'];
+      swp['26'] = tunnelTotalLength;
+      // Minimum payment for pipelaying is based on the generated Surface and Laying Summary.
+      // Price per metre is selected from the rate table using Surface + No. of Ways.
+      // If the exact No. of Ways is not listed, the next higher listed tier is used.
+      const minimumPaymentRateTable = {
+        'Soil': {
+          1:13.17, 2:29.60, 3:40.70, 4:41.93, 6:55.50, 8:67.83, 10:78.00, 12:90.00,
+          16:162.00, 18:180.00, 20:186.00, 24:210.00, 36:235.00, 48:295.00
+        },
+        'Footpath': {
+          1:17.56, 2:32.07, 3:43.17, 4:44.40, 6:59.20, 8:71.53, 10:80.40, 12:92.40,
+          16:175.20, 18:199.20, 20:204.00, 24:228.00, 36:250.00, 48:310.00
+        },
+        'Carriageway': {
+          1:32.19, 2:44.22, 3:54.27, 4:56.85, 6:70.30, 8:82.63, 10:96.00, 12:105.60,
+          16:186.00, 18:210.00, 20:213.60, 24:240.00, 36:266.00, 48:332.00
+        },
+        'Across carriageway': {
+          1:73.72, 2:86.33, 3:127.03, 4:128.22, 6:148.00, 8:160.33, 10:176.40, 12:196.80,
+          16:294.00, 18:346.80, 20:338.40, 24:381.60, 36:426.00, 48:534.00
+        }
+      };
+
+      function getMinimumPaymentRate(surface, ways) {
+        const table = minimumPaymentRateTable[surface];
+        if (!table) return 0;
+        const roundedWays = Math.max(1, Math.round(Number(ways) || 1));
+        if (table[roundedWays] !== undefined) return table[roundedWays];
+        const tiers = Object.keys(table).map(Number).sort((a, b) => a - b);
+        const nextTier = tiers.find(tier => tier >= roundedWays);
+        return table[nextTier || tiers[tiers.length - 1]] || 0;
+      }
+
+      const minimumPaymentAmount = summaryList.reduce((sum, item) => {
+        const rate = getMinimumPaymentRate(item.surface, item.ducts);
+        return sum + ((Number(item.length) || 0) * rate);
+      }, 0);
+      swp['1.4.15'] = minimumPaymentAmount < 1540 ? 1 : 0;
+      if (surfaceTotals['Soil'] > 0) { swp['9.5'] = surfaceTotals['Soil']; }
+      const asphaltBase = surfaceTotals['Carriageway'] + surfaceTotals['Across carriageway'];
+      const asphaltQty = asphaltBase * 3.6 * 1.4;
+      if (document.getElementById('claimAsphalt50')?.checked) { swp['9.6'] = asphaltQty; swp['9.8'] = asphaltQty; }
+      if (document.getElementById('claimAsphalt75')?.checked) { swp['9.7'] = asphaltQty; swp['9.9'] = asphaltQty; }
+      swp['20'] = selectedWholeQtyOrDefault('claimTma', 'claimTmaQty', 1);
+      swp['21'] = selectedWholeQtyOrDefault('claimWaterTank', 'claimWaterTankQty', 1);
+      swp['13.2'] = selectedWholeQtyOrDefault('claimWayleave', 'claimWayleaveQty', 1);
+      swp['30.2'] = selectedWholeQtyOrDefault('claimAso', 'claimAsoQty', 1);
+      const millingPatchingQty = selectedWholeQtyOrDefault('claimMillingPatching', 'claimMillingPatchingQty', 1);
+      swp['10.1'] = millingPatchingQty; swp['10.2'] = millingPatchingQty;
+
+      const manholes = readManholeRows();
+      let boringOneWayTotal = 0, extraBoringTotal = 0, leadInPipeTotal = 0;
+      const sameWallBoringGroups = {};
+      function addBoringSide(manholeNo, isExistingSide, isSameWall, ductQty) {
+        if (!isExistingSide || ductQty <= 0) return;
+        const normalizedManholeNo = String(manholeNo || '').trim().toUpperCase();
+        if (isSameWall && normalizedManholeNo) {
+          // Same wall boring is grouped by manhole number. The first boring on that wall
+          // remains Item 2, and subsequent boring on the same wall is counted under Item 2.1.
+          if (!sameWallBoringGroups[normalizedManholeNo]) sameWallBoringGroups[normalizedManholeNo] = [];
+          sameWallBoringGroups[normalizedManholeNo].push(ductQty);
+        } else {
+          // Normal boring: first duct under Item 2, remaining ducts under Item 2.1.
+          boringOneWayTotal += 1;
+          extraBoringTotal += Math.max(ductQty - 1, 0);
+        }
+      }
+      manholes.forEach(mh => {
+        const ductQty = getDuctQtyByIpid(mh.ipidNo);
+        const hasTextA = mh.manholeA !== '';
+        const hasTextB = mh.bMode === 'text' && mh.manholeB !== '';
+        const isLeadInPipe = mh.bMode === 'lead-in' && mh.manholeB === 'To lead-in Pipe';
+        if (isLeadInPipe) leadInPipeTotal += 1;
+        if (!hasTextA || ductQty <= 0) return;
+        if (hasTextB && mh.isNewA && mh.isNewB) return;
+
+        addBoringSide(mh.manholeA, hasTextA && !mh.isNewA, !!mh.sameWallA, ductQty);
+        if (hasTextB) addBoringSide(mh.manholeB, !mh.isNewB, !!mh.sameWallB, ductQty);
+        // For To lead-in Pipe, only the Manhole A side is counted for boring.
+      });
+      Object.values(sameWallBoringGroups).forEach(ductList => {
+        const totalDuctsOnSameWall = ductList.reduce((sum, qty) => sum + qty, 0);
+        if (totalDuctsOnSameWall <= 0) return;
+        // First boring on the same wall face is Item 2. All remaining duct count goes to Item 2.1.
+        boringOneWayTotal += 1;
+        extraBoringTotal += Math.max(totalDuctsOnSameWall - 1, 0);
+      });
+      swp['2'] = boringOneWayTotal; swp['2.1'] = extraBoringTotal; swp['4.1'] = leadInPipeTotal > 0 ? 1 : 0;
+      if (totalLengthCalculated < 44.57831) swp['12.1'] = 1; else swp['12.3'] = totalLengthCalculated;
+      // Item 28 warning slab is based on the number of columns.
+      // Every 2 columns require 1 warning slab line: 1-2 columns = 1, 3-4 = 2, 5-6 = 3, etc.
+      // For Common Trench, the combined columns for the selected Area are used.
+      swp['28'] = calculateWarningSlabQty(rows);
+
+      const desc = { '1.4.15':'Minimum payment for pipelaying (regardless of number of ways and surface)', '2':'Boring 1-way pipe', '2.1':'Extra boring', '4.1':'Pipeline Testing', '9.1':'Along carriageway re-instatement', '9.2':'Across carriageway re-instatement', '9.3':'Footpath re-instatement', '9.4':'Soil re-instatement', '9.5':'Supply and plant on soil', '9.6':'Supply and lay asphalt (50mm)', '9.7':'Supply and lay asphalt (75mm)', '9.8':'Grind or cold mill asphalt (50mm)', '9.9':'Grind or cold mill asphalt (75mm)', '10.1':'Mobilisation of pavior machine', '10.2':'Mobilisation of milling machine', '12.1':'GPS Min. Payment $370', '12.3':'GPS per metre', '20':'TMA', '21':'Water Tank', '13.2':'Power Grid / Power Gas Application Fee', '26':'Tunnelling under structure regardless of ways', '28':'Supply and install PVC Warning Slab', '30.2':'Deployment of Auxiliary Security Officer (ASO)' };
+      const wholeItems = new Set(['1.4.15','2','2.1','4.1','10.1','10.2','12.1','20','21','13.2','28','30.2']);
+      const fmt = (item, qty) => wholeItems.has(item) ? String(Math.round(qty)) : qty.toFixed(2);
+      const positiveItems = Object.keys(swp).filter(k => swp[k] > 0).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+      const swpRowsForPdf = positiveItems.map(k => [k, desc[k], fmt(k, swp[k])]);
+
+      let html = '<h2>Surface and Laying Summary</h2><div class="table-wrap"><table><thead><tr><th>Surface</th><th>Trench ID</th><th>No. of Ways</th><th>Calculated Length (m)</th></tr></thead><tbody>';
+      if (!summaryList.length) html += '<tr><td colspan="4" class="empty-state">No valid structural trench layouts found. Please select Surface and ensure Length is available.</td></tr>';
+      else summaryList.forEach(item => html += `<tr><td>${escapeHtml(item.surface)}</td><td>${escapeHtml(item.trenchId)}</td><td>${item.ducts}</td><td class="qty">${item.length.toFixed(2)}</td></tr>`);
+      html += '</tbody></table></div>';
+      html += '<h2 style="margin-top:18px;">Generated SWP Priced Items</h2><div class="table-wrap"><table><thead><tr><th>Item No</th><th>Description</th><th>Quantity</th></tr></thead><tbody>';
+      if (!positiveItems.length) html += '<tr><td colspan="3" class="empty-state">No priced items generated.</td></tr>';
+      else positiveItems.forEach(k => html += `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(desc[k])}</td><td class="qty">${fmt(k, swp[k])}</td></tr>`);
+      html += '</tbody></table></div>';
+      document.getElementById('swpOutput').innerHTML = html;
+      document.getElementById('swpOutputCard').classList.remove('hidden');
+      document.getElementById('swpOutputCard').scrollIntoView({behavior:'smooth', block:'start'});
+      generateCompletionCertificatePdf(summaryList, swpRowsForPdf);
+    }
+
+    function clearManholeRow(row) { row.querySelector('.manhole-pipe-size').value = ''; row.querySelector('.manhole-a').value = ''; row.querySelector('.manhole-a-new').checked = false; row.querySelector('.boring-same-wall-a').checked = false; row.querySelector('.manhole-ipid').value = ''; row.querySelector('.pipe-test-date').value = ''; row.querySelector('.manhole-b-mode').value = 'text'; row.querySelector('.manhole-b-text').value = ''; row.querySelector('.manhole-b-text').classList.remove('hidden'); row.querySelector('.boring-same-wall-b').checked = false; row.querySelector('.manhole-b-new').checked = false; delete row.dataset.autoSource; updatePipeAcceptanceChecklistByPipeSizes(); }
+    function rowHasMeaningfulContent(row, ignoreManholeA = false) { const pipeSize = row.querySelector('.manhole-pipe-size')?.value.trim() || ''; const a = row.querySelector('.manhole-a')?.value.trim() || ''; const newA = row.querySelector('.manhole-a-new')?.checked; const sameWallA = row.querySelector('.boring-same-wall-a')?.checked; const ipidNo = row.querySelector('.manhole-ipid')?.value.trim() || ''; const pipeTestDate = row.querySelector('.pipe-test-date')?.value.trim() || ''; const mode = row.querySelector('.manhole-b-mode')?.value || 'text'; const b = row.querySelector('.manhole-b-text')?.value.trim() || ''; const sameWallB = row.querySelector('.boring-same-wall-b')?.checked; const newB = row.querySelector('.manhole-b-new')?.checked; return [pipeSize, ignoreManholeA ? '' : a, newA ? '1':'', sameWallA ? '1':'', ipidNo, pipeTestDate, mode === 'lead-in' ? 'lead-in' : b, sameWallB ? '1':'', newB ? '1':''].some(Boolean); }
+    function removeAutoGeneratedSuccessorIfEmpty(row) { const next = row.nextElementSibling; if (!next || next.dataset.autoSource !== row.dataset.rowId) return; if (!rowHasMeaningfulContent(next, true)) next.remove(); else delete next.dataset.autoSource; }
+    function syncAutoLinkedNextRow(row) { const mode = row.querySelector('.manhole-b-mode')?.value || 'text'; const bText = row.querySelector('.manhole-b-text')?.value.trim() || ''; if (mode !== 'text' || !bText) { removeAutoGeneratedSuccessorIfEmpty(row); return; } const next = row.nextElementSibling; if (next && next.dataset.autoSource === row.dataset.rowId) { next.querySelector('.manhole-a').value = bText; return; } if (next && !next.dataset.autoSource && !rowHasMeaningfulContent(next)) { next.dataset.autoSource = row.dataset.rowId; next.querySelector('.manhole-a').value = bText; return; } addManholeRow({ manholeA: bText }, row, row.dataset.rowId); }
+    function updateManholeBMode(row) { const mode = row.querySelector('.manhole-b-mode')?.value || 'text'; const textInput = row.querySelector('.manhole-b-text'); textInput.classList.toggle('hidden', mode === 'lead-in'); if (mode === 'lead-in') textInput.value = ''; syncAutoLinkedNextRow(row); }
+    function addManholeRow(data = {}, insertAfterRow = null, autoSource = '') {
+      const tbody = document.getElementById('manholeRows'); const row = document.createElement('tr'); row.dataset.rowId = `manhole-row-${++manholeRowSequence}`; if (autoSource) row.dataset.autoSource = autoSource;
+      const bMode = data.bMode === 'lead-in' ? 'lead-in' : 'text';
+      row.innerHTML = `<td><select class="manhole-pipe-size" required aria-label="Pipe Size"><option value="">Select Pipe Size</option><option value="P50" ${(data.pipeSize || '') === 'P50' ? 'selected' : ''}>P50</option><option value="P110" ${(data.pipeSize || '') === 'P110' ? 'selected' : ''}>P110</option></select></td><td><input type="text" class="manhole-a" required placeholder="e.g. MH3429" value="${escapeHtml(data.manholeA || '')}"></td><td class="checkbox-cell"><input type="checkbox" class="manhole-a-new" ${data.isNewA ? 'checked' : ''}></td><td class="checkbox-cell"><input type="checkbox" class="boring-same-wall-a" title="Tick if Manhole A boring is on the same wall" ${data.sameWallA ? 'checked' : ''}></td><td><select class="manhole-ipid" required aria-label="IPID No.">${buildIpidOptions(data.ipidNo || '')}</select></td><td><select class="manhole-b-mode"><option value="text" ${bMode === 'text' ? 'selected' : ''}>Enter Manhole B</option><option value="lead-in" ${bMode === 'lead-in' ? 'selected' : ''}>To lead-in Pipe</option></select><input type="text" class="manhole-b-text ${bMode === 'lead-in' ? 'hidden' : ''}" required placeholder="e.g. MH1011272" value="${escapeHtml(data.manholeB || '')}" style="margin-top:6px;"></td><td class="checkbox-cell"><input type="checkbox" class="manhole-b-new" ${data.isNewB ? 'checked' : ''}></td><td class="checkbox-cell"><input type="checkbox" class="boring-same-wall-b" title="Tick if Manhole B boring is on the same wall" ${data.sameWallB ? 'checked' : ''}></td><td><input type="date" class="pipe-test-date" required max="" value="${escapeHtml(data.pipeTestDate || '')}"></td><td><button type="button" class="remove-row">Remove</button></td>`;
+      if (insertAfterRow && insertAfterRow.parentNode === tbody) insertAfterRow.insertAdjacentElement('afterend', row); else tbody.appendChild(row);
+      applyPastDateMax(row.querySelector('.pipe-test-date'));
+      row.querySelector('.manhole-pipe-size').addEventListener('change', event => { clearMandatoryHighlightForField(event.target); updatePipeAcceptanceChecklistByPipeSizes(); });
+      row.querySelector('.manhole-a').addEventListener('input', event => { clearMandatoryHighlightForField(event.target); syncNewManholeTags(); });
+      row.querySelector('.manhole-a-new').addEventListener('change', event => handleNewManholeCheckboxChange(event.target));
+      row.querySelector('.manhole-ipid').addEventListener('change', event => { clearMandatoryHighlightForField(event.target); refreshManholeIpidDropdowns(); });
+      row.querySelector('.pipe-test-date').addEventListener('change', event => { applyPastDateMax(event.target); clearMandatoryHighlightForField(event.target); });
+      row.querySelector('.manhole-b-mode').addEventListener('change', event => { clearMandatoryHighlightForField(event.target); updateManholeBMode(row); syncNewManholeTags(); });
+      row.querySelector('.manhole-b-new').addEventListener('change', event => handleNewManholeCheckboxChange(event.target));
+      row.querySelector('.manhole-b-text').addEventListener('input', event => { clearMandatoryHighlightForField(event.target); syncNewManholeTags(); });
+      row.querySelector('.manhole-b-text').addEventListener('change', () => { syncAutoLinkedNextRow(row); syncNewManholeTags(); }); row.querySelector('.manhole-b-text').addEventListener('blur', () => { syncAutoLinkedNextRow(row); syncNewManholeTags(); });
+      row.querySelector('.remove-row').addEventListener('click', () => { const rows = document.querySelectorAll('#manholeRows tr'); if (rows.length === 1) clearManholeRow(row); else row.remove(); refreshManholeIpidDropdowns(); syncNewManholeTags(); updatePipeAcceptanceChecklistByPipeSizes(); });
+      updateManholeBMode(row); refreshManholeIpidDropdowns(); syncNewManholeTags(); updatePipeAcceptanceChecklistByPipeSizes(); return row;
+    }
+
+    function normaliseManholeNumber(value) {
+      return String(value || '').trim().toUpperCase();
+    }
+
+    function syncNewManholeTags() {
+      const knownNewManholes = new Set();
+      Array.from(document.querySelectorAll('#manholeRows tr')).forEach(row => {
+        const manholeAInput = row.querySelector('.manhole-a');
+        const manholeANew = row.querySelector('.manhole-a-new');
+        const manholeBMode = row.querySelector('.manhole-b-mode')?.value || 'text';
+        const manholeBInput = row.querySelector('.manhole-b-text');
+        const manholeBNew = row.querySelector('.manhole-b-new');
+
+        const manholeAKey = normaliseManholeNumber(manholeAInput?.value || '');
+        if (manholeAKey && knownNewManholes.has(manholeAKey) && manholeANew && !manholeANew.checked) {
+          manholeANew.checked = true;
+          manholeANew.dataset.autoNew = '1';
+        } else if (manholeAKey && !knownNewManholes.has(manholeAKey) && manholeANew?.dataset.autoNew === '1') {
+          manholeANew.checked = false;
+          delete manholeANew.dataset.autoNew;
+        }
+        if (manholeAKey && manholeANew?.checked) knownNewManholes.add(manholeAKey);
+
+        const manholeBKey = manholeBMode === 'lead-in' ? '' : normaliseManholeNumber(manholeBInput?.value || '');
+        if (manholeBKey && knownNewManholes.has(manholeBKey) && manholeBNew && !manholeBNew.checked) {
+          manholeBNew.checked = true;
+          manholeBNew.dataset.autoNew = '1';
+        } else if (manholeBKey && !knownNewManholes.has(manholeBKey) && manholeBNew?.dataset.autoNew === '1') {
+          manholeBNew.checked = false;
+          delete manholeBNew.dataset.autoNew;
+        }
+        if (manholeBKey && manholeBNew?.checked) knownNewManholes.add(manholeBKey);
+      });
+    }
+
+    function handleNewManholeCheckboxChange(checkbox) {
+      if (!checkbox) return;
+      delete checkbox.dataset.autoNew;
+      syncNewManholeTags();
+      updatePipeAcceptanceChecklistByPipeSizes();
+    }
+
+    function readManholeRows() { return Array.from(document.querySelectorAll('#manholeRows tr')).map(row => { const bMode = row.querySelector('.manhole-b-mode')?.value || 'text'; return { pipeSize: row.querySelector('.manhole-pipe-size')?.value.trim() || '', manholeA: row.querySelector('.manhole-a')?.value.trim() || '', isNewA: !!row.querySelector('.manhole-a-new')?.checked, sameWallA: !!row.querySelector('.boring-same-wall-a')?.checked, ipidNo: row.querySelector('.manhole-ipid')?.value.trim() || '', manholeB: bMode === 'lead-in' ? 'To lead-in Pipe' : (row.querySelector('.manhole-b-text')?.value.trim() || ''), bMode, sameWallB: !!row.querySelector('.boring-same-wall-b')?.checked, isNewB: !!row.querySelector('.manhole-b-new')?.checked, pipeTestDate: row.querySelector('.pipe-test-date')?.value.trim() || '' }; }).filter(item => item.pipeSize || item.manholeA || item.ipidNo || item.manholeB || item.isNewA || item.sameWallA || item.sameWallB || item.isNewB || item.pipeTestDate); }
+
+    function updatePipeAcceptanceChecklistByPipeSizes() {
+      const selectedPipeSizes = new Set();
+      document.querySelectorAll('.manhole-pipe-size').forEach(select => {
+        const value = String(select.value || '').trim();
+        if (value === 'P50' || value === 'P110') selectedPipeSizes.add(value);
+      });
+
+      const showP50 = selectedPipeSizes.has('P50');
+      const showP110 = selectedPipeSizes.has('P110');
+
+      const p50Title = document.getElementById('p50ChecklistTitle');
+      const p50Group = document.getElementById('p50ChecklistGroup');
+      const p110Title = document.getElementById('p110ChecklistTitle');
+      const p110Group = document.getElementById('p110ChecklistGroup');
+
+      if (p50Title) p50Title.classList.toggle('hidden', !showP50);
+      if (p50Group) p50Group.classList.toggle('hidden', !showP50);
+      if (p110Title) p110Title.classList.toggle('hidden', !showP110);
+      if (p110Group) p110Group.classList.toggle('hidden', !showP110);
+    }
+
+    function inputValue(id) { return document.getElementById(id)?.value.trim() || ''; }
+    function isChecked(id) { return !!document.getElementById(id)?.checked; }
+    function reportMark(checked) { return `<span class="report-mark">${checked ? '✓' : ''}</span>`; }
+    function formatReportDate(raw) { if (!raw) return ''; const [y,m,d] = raw.split('-'); return y && m && d ? `${d}-${m}-${y.slice(-2)}` : raw; }
+    function updatePipeChecklistVisibility() { const pipeSize = inputValue('reportPipeSize') || 'P110'; document.getElementById('p110ChecklistGroup').classList.toggle('hidden', pipeSize !== 'P110'); document.getElementById('p50ChecklistGroup').classList.toggle('hidden', pipeSize !== 'P50'); }
+    function renderPipeAcceptanceReport() {
+      const projectNo = escapeHtml(inputValue('reportProjectNo')); const location = escapeHtml(inputValue('reportLocation')); const pipeSize = escapeHtml(inputValue('reportPipeSize')); const dateTested = escapeHtml(formatReportDate(inputValue('reportDateTested'))); const manholes = readManholeRows();
+      const checklist = [{ id:'checkDrawRope', text:'Size of draw rope provided (6mm)' }, ...(pipeSize === 'P110' ? [{ id:'checkP110Through', text:'Mandrel through for P110 pipe (dia. 83mm)' }, { id:'checkSpiralThrough', text:'Mandrel not through for P110 pipe, Spiral Mandrel (size 95mm) through', reasonId:'reasonSpiralThrough' }, { id:'checkMandrelNotThrough', text:'Mandrel and Spiral Mandrel not through', reasonId:'reasonMandrelNotThrough' }] : [{ id:'checkP50Through', text:'Spiral Mandrel for P50 pipe (size 44mm) through' }, { id:'checkSubDuct', text:'Spiral Mandrel not through, use 1 inch sub duct (25mm)' }]), { id:'checkAbandonedMarked', text:'Abandoned pipe(s) has/have been marked in red on MH wall' }];
+      const photoRows = [['a)', 'Pipe length for each type of trench surface, trench width, trench depth', 'photoA'], ['b)', 'Pipe encasement sand, quarry dust or concrete', 'photoB'], ['c)', 'Pipe spacers between installed pipes', 'photoC'], ['d)', 'Fabric wire reinforcement for pipeline 16W & above', 'photoD'], ['e)', 'Strutting & shoring for trench depth > 1.5m', 'photoE'], ['f)', 'Reinstatement length, width for each type of trench surface', 'photoF']];
+      const manholeRowsHtml = manholes.length ? manholes.map(mh => `<tr><td>${escapeHtml(mh.pipeSize)}</td><td>${escapeHtml(mh.manholeA)}</td><td>${mh.isNewA ? '✓' : ''}</td><td>${mh.sameWallA ? '✓' : ''}</td><td>${escapeHtml(mh.ipidNo)}</td><td>${escapeHtml(mh.manholeB)}</td><td>${mh.isNewB ? '✓' : ''}</td><td>${mh.sameWallB ? '✓' : ''}</td><td>${escapeHtml(formatReportDate(mh.pipeTestDate))}</td></tr>`).join('') : '<tr><td colspan="9">No manhole connections entered.</td></tr>';
+      const checklistHtml = checklist.map(item => { const reason = item.reasonId ? escapeHtml(inputValue(item.reasonId)) : ''; return `<li>${reportMark(isChecked(item.id))}<div>${escapeHtml(item.text)}${item.reasonId ? `<div><strong>Reason:</strong> ${reason || '&nbsp;'}</div>` : ''}</div></li>`; }).join('');
+      const photosHtml = photoRows.map(([letter, text, selectId]) => `<div class="photo-report-row"><strong>${letter}</strong><span>${escapeHtml(text)}</span><span class="photo-status">${escapeHtml(document.getElementById(selectId)?.value || 'No')}</span></div>`).join('');
+      const preview = document.getElementById('pipeReportPreview');
+      preview.innerHTML = `<div class="print-sheet"><div class="print-title">Pipe Acceptance Report</div><section class="print-box"><div class="print-box-header">1) Pipe Testing Record</div><div class="print-body"><div class="report-meta"><div><strong>Project No:</strong><span class="report-line">${projectNo || '&nbsp;'}</span></div><div><strong>Location:</strong><span class="report-line">${location || '&nbsp;'}</span></div><div><strong>Pipe Size under Test:</strong><span class="report-line">${pipeSize || '&nbsp;'}</span></div><div><strong>Date P/L Tested:</strong><span class="report-line">${dateTested || '&nbsp;'}</span></div></div><table class="report-table"><thead><tr><th>Pipe Size</th><th>Manhole A</th><th>New MH</th><th>Boring Same Wall</th><th>IPID No.</th><th>Manhole B</th><th>New MH</th><th>Boring Same Wall</th><th>Pipe Test Date</th></tr></thead><tbody>${manholeRowsHtml}</tbody></table></div></section><section class="print-box"><div class="print-box-header">Pipe Acceptance Checklist</div><div class="print-body"><ul class="report-list">${checklistHtml}</ul></div></section><section class="print-box"><div class="print-box-header">II) Photo List: Attached photos to clearly show</div><div class="print-body">${photosHtml}</div></section></div>`;
+      preview.classList.add('is-visible'); preview.scrollIntoView({ behavior:'smooth', block:'start' });
+    }
+
+    ['contractor', 'reportProjectNo', 'serviceOrderNo', 'reportLocation', 'ltaApplicationNo', 'pipelineSupervisor', 'workCompletedOn'].forEach(id => {
+      const field = document.getElementById(id);
+      if (field) field.addEventListener('input', event => clearMandatoryHighlightForField(event.target));
+      if (field) field.addEventListener('change', event => clearMandatoryHighlightForField(event.target));
+    });
+    addManholeRow();
+    updatePipeAcceptanceChecklistByPipeSizes();
+  </script>
+
+
+</body>
+</html>
