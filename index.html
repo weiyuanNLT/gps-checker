@@ -25,8 +25,12 @@
     .container { max-width: 1500px; margin: 0 auto; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); margin-bottom: 18px; }
     h1 { margin: 0; font-size: 24px; color: var(--header); }
-    .title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap; width: 100%; }
+    .title-row { display: grid; grid-template-columns: 80% 20%; align-items: center; gap: 0; width: 100%; }
+    .title-col { min-width: 0; }
+    .version-col { min-width: 0; text-align: right; }
     .version-label { color: var(--muted); font-weight: 700; white-space: nowrap; padding-top: 0; }
+    .version-click { background: transparent; border: none; cursor: pointer; text-decoration: underline; font: inherit; padding: 0; }
+    .version-click:hover { color: var(--header); background: transparent; }
     .version-link { width: auto; min-width: max-content; margin-left: auto; border: none; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; color: var(--muted); padding: 0; box-shadow: none; }
     .version-link:hover { color: var(--header); background: transparent; opacity: 1; }
     h2 { margin: 0 0 8px; font-size: 18px; color: var(--header); }
@@ -142,38 +146,6 @@
       #pipeReportPreview { display: block !important; position: absolute; inset: 0 auto auto 0; width: 100%; border: none; border-radius: 0; }
     }
 
-  .change-log-toggle {
-    position: fixed;
-    left: 16px;
-    bottom: 16px;
-    z-index: 9999;
-    min-height: 36px;
-    padding: 0 12px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    color: #ffffff;
-    background: #1f4e79;
-    border: 1px solid rgba(255,255,255,0.35);
-    box-shadow: 0 8px 18px rgba(0,0,0,0.18);
-  }
-    position: fixed;
-    left: 16px;
-    bottom: 62px;
-    z-index: 9999;
-    width: min(520px, calc(100vw - 32px));
-    max-height: 320px;
-    overflow: auto;
-    display: none;
-    background: #ffffff;
-    color: #111827;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    box-shadow: 0 16px 36px rgba(0,0,0,0.24);
-    padding: 14px;
-  }
-  .change-log-panel th, .change-log-panel td { border: 1px solid #d1d5db; padding: 8px; text-align: left; color: #111827; }
-
   .project-checkbox-field {
     display: flex;
     align-items: center;
@@ -202,8 +174,12 @@
   <div class="container">
     <div class="card">
       <div class="title-row">
-        <h1>GPS Checker &amp; Claim Generator</h1>
-        <span class="version-label">Version: A1.1</span>
+        <div class="title-col">
+          <h1>GPS Checker &amp; Claim Generator</h1>
+        </div>
+        <div class="version-col">
+          <button type="button" class="version-label version-click" onclick="openChangeLogWindow()" title="Open Change Log">Version: A1.2</button>
+        </div>
       </div>
       <div class="intro-text">
         <p>The tool is arranged into 5 sections: <strong>Section 1</strong> records manhole entry, <strong>Section 2</strong> checks pipe length from GPS coordinates, <strong>Section 3</strong> captures the pipe acceptance report checklist, <strong>Section 4</strong> captures additional claims, and <strong>Section 5</strong> generates the surface summary and SWP priced items.</p>
@@ -453,7 +429,13 @@
       Object.entries(found).forEach(([id, value]) => setProjectInfoFieldIfBlank(id, value));
     }
     function pointLabel(item, extraText = '') { const ipidText = item.ipid ? `, IPID ${item.ipid}` : ''; return `Point ${item.point}${ipidText}${extraText}`; }
-    function calculateDimension(ducts, count, diameter) { if (Number.isNaN(ducts) || Number.isNaN(count) || Number.isNaN(diameter)) return NaN; if (ducts < 6) return (count * diameter) + (25 * (count - 1)); if (ducts <= 16) return (count * diameter) + (25 * (count - 1)) + 100; return (count * diameter) + (25 * (count - 1)) + 200; }
+    function calculateDimension(count, diameter, haunches) {
+      if (Number.isNaN(count) || Number.isNaN(diameter)) return NaN;
+      const haunchValue = String(haunches || '').trim().toLowerCase();
+      if (haunchValue !== 'yes' && haunchValue !== 'no') return NaN;
+      const haunchAllowance = haunchValue === 'yes' ? 100 : 0;
+      return (count * diameter) + (25 * (count - 1)) + haunchAllowance;
+    }
     function selectedWholeQtyOrDefault(checkboxId, qtyInputId, defaultQty = 1) { const checkbox = document.getElementById(checkboxId); if (!checkbox || !checkbox.checked) return 0; const parsed = Number(String(document.getElementById(qtyInputId)?.value || '').trim()); return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultQty; }
     function positiveWholeNumberOrZero(value) { const parsed = Number(String(value || '').trim()); return Number.isInteger(parsed) && parsed > 0 ? parsed : 0; }
     function todayIsoDate() {
@@ -635,10 +617,10 @@
                 haunchErrors.push(pointLabel(item, `, Haunch required but Excel Haunches is ${displayValue}`));
               }
             }
-            const calculatedHeight = calculateDimension(item.ducts, item.rowCount, item.diameter);
+            const calculatedHeight = calculateDimension(item.rowCount, item.diameter, item.haunches);
             if (Number.isNaN(calculatedHeight) || Number.isNaN(item.height)) heightErrors.push(pointLabel(item, ', Missing data for Height Check'));
             else if (!isSameNumber(calculatedHeight, item.height)) heightErrors.push(pointLabel(item, `, Excel Height ${item.height}, Calculated ${calculatedHeight}`));
-            const calculatedWidth = calculateDimension(item.ducts, item.columns, item.diameter);
+            const calculatedWidth = calculateDimension(item.columns, item.diameter, item.haunches);
             if (Number.isNaN(calculatedWidth) || Number.isNaN(item.width)) widthErrors.push(pointLabel(item, ', Missing data for Width Check'));
             else if (!isSameNumber(calculatedWidth, item.width)) widthErrors.push(pointLabel(item, `, Excel Width ${item.width}, Calculated ${calculatedWidth}`));
           });
@@ -1174,7 +1156,7 @@
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.text('Version: A1.1', pageWidth - margin, y, { align: 'right' });
+      doc.text('Version: A1.2', pageWidth - margin, y, { align: 'right' });
       doc.setFontSize(16);
       doc.text('Completion Certificate', pageWidth / 2, y, { align: 'center' });
       y += 10;
@@ -1658,6 +1640,27 @@
       if (field) field.addEventListener('input', event => clearMandatoryHighlightForField(event.target));
       if (field) field.addEventListener('change', event => clearMandatoryHighlightForField(event.target));
     });
+
+
+    const changeLogEntries = [
+      ['A1.2', 'Updated Height and Width validation to use the Haunches value. If Haunches = No, no additional allowance is added. If Haunches = Yes, add 100mm to Height and Width.'],
+      ['A1.1', 'Updated reinstatement K-Factor table for Soil, Footpath, Carriageway and Across Carriageway. Corrected Below 16W 2-column Carriageway factor to 0.55.'],
+      ['A1.0', 'Reset tool version to A1.0 and removed the previous public change log display.']
+    ];
+
+    function openChangeLogWindow() {
+      const rows = changeLogEntries.map(([version, description]) => `<tr><td style="border:1px solid #d1d5db;padding:8px;font-weight:700;white-space:nowrap;">${escapeHtml(version)}</td><td style="border:1px solid #d1d5db;padding:8px;">${escapeHtml(description)}</td></tr>`).join('');
+      const html = `<!DOCTYPE html><html><head><title>Change Log - GPS Checker & Claim Generator</title><meta charset="UTF-8"><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827;background:#f8fafc;}h1{margin:0 0 16px;color:#1f4e79;}table{border-collapse:collapse;width:100%;background:#fff;}th{background:#1f4e79;color:#fff;border:1px solid #1f4e79;padding:10px;text-align:left;}td{vertical-align:top;}p{color:#4b5563;}</style></head><body><h1>Change Log</h1><p>GPS Checker &amp; Claim Generator</p><table><thead><tr><th>Version</th><th>Changes</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+      const win = window.open('', '_blank', 'width=760,height=560,scrollbars=yes,resizable=yes');
+      if (!win) {
+        alert('Popup blocked. Please allow popups for this file to view the Change Log.');
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    }
+
     addManholeRow();
     updatePipeAcceptanceChecklistByPipeSizes();
   </script>
